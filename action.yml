@@ -1,0 +1,454 @@
+﻿name: "PR Preview"
+description: "PR preview helper for PRs and forks."
+author: "open-resource-discovery"
+
+inputs:
+  fork:
+    description: 'Set to "true" to enable forks support.'
+    required: false
+    default: "false"
+
+  build-dir:
+    description: "Directory containing the built preview for direct deploy from the current job."
+    required: false
+    default: "build"
+
+  token:
+    description: "Token used for API + deploy/cleanup (PAT recommended - falls back to GITHUB_TOKEN when not available)."
+    required: false
+    default: ${{ github.token }}
+
+  target-repo:
+    description: "Owner/repo that will host the previews (deploy/cleanup)."
+    required: false
+
+  target-branch:
+    description: "Branch to which previews are deployed."
+    required: false
+    default: "main"
+
+  pages-base-url:
+    description: 'Base URL used in the preview link (e.g. "https://<org>.github.io/<repo>").'
+    required: false
+    default: ""
+
+  qr-code:
+    description: 'Include a QR code in the PR comment. Set to "false" to disable, "true" to use default provider, or provide a provider URL prefix ending with "url=".'
+    required: false
+    default: "true"
+
+  comment-header:
+    description: "Header used to identify the sticky PR comment."
+    required: false
+    default: "pr-preview"
+
+  comment-title:
+    description: "Title shown in the PR comment."
+    required: false
+    default: "PR Preview"
+
+  comment-footer:
+    description: "Footer (branding/ads) shown in the PR comment. Leave empty to hide."
+    required: false
+    default: "[open-resource-discovery/pr-preview-action](https://github.com/open-resource-discovery/pr-preview-action)"
+
+  umbrella-dir:
+    description: "Top-level directory inside the target repo to namespace previews."
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup environment
+      id: setup
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # Constants
+        ARTIFACT_NAME="pr-preview"
+        META_FILE="pr-preview-meta.env"
+
+        EVENT_NAME="${{ github.event_name }}"
+        REPO_NAME="${{ github.repository }}"
+        DEPLOYMENT_ACTION="skip"  # deploy | upload | remove | worker | skip
+        PR_TYPE="unknown"         # local | fork
+        PR_NUMBER=""
+        HEAD_REPO_FULL_NAME=""
+        TARGET_REPO="${{ inputs.target-repo }}"
+        TARGET_BRANCH="${{ inputs.target-branch }}"
+        BUILD_DIR="${{ inputs.build-dir }}"
+        PAGES_BASE_URL="${{ inputs.pages-base-url }}"
+        QR_CODE_INPUT="${{ inputs.qr-code }}"
+        QR_CODE_SUFFIX=""
+        COMMENT_HEADER="${{ inputs.comment-header }}"
+        PREVIEW_TARGET_FOLDER=""
+        PREVIEW_URL=""
+        COMMENT_TITLE="${{ inputs.comment-title }}"
+        COMMENT_FOOTER="${{ inputs.comment-footer }}"
+        UMBRELLA_DIR_INPUT="${{ inputs.umbrella-dir }}"
+        UMBRELLA_DIR=""
+        WORKFLOW_CONCLUSION=""
+        WORKFLOW_EVENT=""
+        WORKFLOW_RUN_REPO_FULL_NAME=""
+
+        # Resolve PR context
+        if [ "$EVENT_NAME" = "pull_request" ]; then
+          HEAD_REPO_FULL_NAME="${{ github.event.pull_request.head.repo.full_name }}"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+        elif [ "$EVENT_NAME" = "workflow_run" ]; then
+          # Note: workflow_run runs from default branch workflow definition
+          HEAD_REPO_FULL_NAME="${{ github.event.workflow_run.head_repository.full_name }}"
+          PR_NUMBER="${{ github.event.workflow_run.pull_requests[0].number }}"
+          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+            DEPLOYMENT_ACTION="skip"
+          fi
+          # Read conclusion from the event payload
+          WORKFLOW_CONCLUSION="${{ github.event.workflow_run.conclusion }}"
+          WORKFLOW_EVENT="${{ github.event.workflow_run.event }}"
+          WORKFLOW_RUN_REPO_FULL_NAME="${{ github.event.workflow_run.repository.full_name }}"
+        else
+          echo "Unsupported event: $EVENT_NAME"
+          exit 1
+        fi
+        # Determine PR type by comparing head repo vs base repo
+        if [ "$HEAD_REPO_FULL_NAME" = "$REPO_NAME" ]; then
+          PR_TYPE="local"
+        else
+          PR_TYPE="fork"
+        fi
+
+        # Default umbrella dir:
+        # - if umbrella-dir is provided: use it
+        # - else if target repo is same as current repo (or not set): use "pr-preview"
+        # - else: derive from source repo name
+        if [ -n "$UMBRELLA_DIR_INPUT" ]; then
+          UMBRELLA_DIR="$UMBRELLA_DIR_INPUT"
+        else
+          # treat empty target-repo as "same repo"
+          if [ -z "$TARGET_REPO" ] || [ "$TARGET_REPO" = "$REPO_NAME" ]; then
+            UMBRELLA_DIR="pr-preview"
+          else
+            UMBRELLA_DIR="${REPO_NAME#*/}" # owner/repo -> repo
+          fi
+          UMBRELLA_DIR="$(printf '%s' "$UMBRELLA_DIR" | tr -cs 'A-Za-z0-9._-' '-')"
+        fi
+
+        # Compute paths/URL
+        if [ -n "$PR_NUMBER" ] && [ "$PR_NUMBER" != "null" ]; then
+          PREVIEW_TARGET_FOLDER="$UMBRELLA_DIR/pr-$PR_NUMBER"
+          if [ -n "$PAGES_BASE_URL" ]; then
+            PREVIEW_URL="${PAGES_BASE_URL%/}/$PREVIEW_TARGET_FOLDER/"
+          else
+            PREVIEW_URL="$PREVIEW_TARGET_FOLDER/"
+          fi
+        fi
+
+        QR_CODE_SUFFIX=""
+        if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]] && [ "$QR_CODE_INPUT" != "false" ]; then
+          QR_PROVIDER="https://qr.rossjrw.com/?color.dark=0d1117&url="
+          if [ "$QR_CODE_INPUT" != "true" ] && [ -n "$QR_CODE_INPUT" ]; then
+            QR_PROVIDER="$QR_CODE_INPUT"
+          fi
+          ENCODED_URL="$(python -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$PREVIEW_URL")"
+          QR_CODE_SUFFIX="<p><img src=\"${QR_PROVIDER}${ENCODED_URL}\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
+        fi
+
+        # Decide action
+        if [ "$EVENT_NAME" = "pull_request" ]; then
+          if [ "$PR_TYPE" = "local" ]; then
+            if [ "${{ github.event.action }}" = "closed" ]; then
+              DEPLOYMENT_ACTION="remove"
+            else
+              DEPLOYMENT_ACTION="deploy"
+            fi
+          else
+            if [ "${{ inputs.fork }}" = "true" ]; then
+              DEPLOYMENT_ACTION="upload"
+            else
+              DEPLOYMENT_ACTION="skip"
+            fi
+          fi
+        elif [ "$EVENT_NAME" = "workflow_run" ]; then
+          # Only proceed for fork PR workflow_run events that succeeded
+          if [ "$WORKFLOW_EVENT" = "pull_request" ] \
+            && [ "$WORKFLOW_CONCLUSION" = "success" ] \
+            && [ "$HEAD_REPO_FULL_NAME" != "$WORKFLOW_RUN_REPO_FULL_NAME" ]; then
+            DEPLOYMENT_ACTION="worker"
+          else
+            DEPLOYMENT_ACTION="skip"
+          fi
+        fi
+
+        # Expose vars for later steps (single source of truth)
+        {
+          echo "event_name=$EVENT_NAME"
+          echo "pr_type=$PR_TYPE"
+          echo "pr_number=$PR_NUMBER"
+          echo "deployment_action=$DEPLOYMENT_ACTION"
+          echo "artifact_name=$ARTIFACT_NAME"
+          echo "meta_file=$META_FILE"
+          echo "target_repo=$TARGET_REPO"
+          echo "target_branch=$TARGET_BRANCH"
+          echo "build_dir=$BUILD_DIR"
+          echo "preview_target_folder=$PREVIEW_TARGET_FOLDER"
+          echo "preview_url=$PREVIEW_URL"
+          echo "qr_code_suffix=$QR_CODE_SUFFIX"
+          echo "comment_header=$COMMENT_HEADER"
+          echo "comment_title=$COMMENT_TITLE"
+          echo "comment_footer=$COMMENT_FOOTER"
+          echo "umbrella_dir=$UMBRELLA_DIR"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Print vars
+      shell: bash
+      run: |
+        echo "event_name=${{ steps.setup.outputs.event_name }}"
+        echo "pr_type=${{ steps.setup.outputs.pr_type }}"
+        echo "pr_number=${{ steps.setup.outputs.pr_number }}"
+        echo "deployment_action=${{ steps.setup.outputs.deployment_action }}"
+        echo "target_repo=${{ steps.setup.outputs.target_repo }}"
+        echo "preview_url=${{ steps.setup.outputs.preview_url }}"
+
+    - name: Prepare + upload artifact (fork PR -> worker instructions)
+      if: steps.setup.outputs.deployment_action == 'upload'
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # Build payload folder
+        rm -rf __pr_preview_payload
+        mkdir -p __pr_preview_payload
+
+        # Decide desired worker action based on PR action
+        WORKER_ACTION="deploy"
+        if [ "${{ github.event.action }}" = "closed" ]; then
+          WORKER_ACTION="remove"
+        fi
+
+        # Copy build output when available (open/sync) - closed typically has no build
+        if [ "$WORKER_ACTION" = "deploy" ] && [ -d "${{ steps.setup.outputs.build_dir }}" ]; then
+          cp -R "${{ steps.setup.outputs.build_dir }}/." __pr_preview_payload/
+        fi
+
+        # Write meta for workflow_run
+        COMMENT_TITLE="${{ inputs.comment-title }}"
+        COMMENT_FOOTER="${{ inputs.comment-footer }}"
+
+        {
+          printf 'WORKER_ACTION=%s\n' "$WORKER_ACTION"
+          printf 'PR_NUMBER=%s\n' "${{ steps.setup.outputs.pr_number }}"
+          printf 'TARGET_REPO=%s\n' "${{ steps.setup.outputs.target_repo }}"
+          printf 'TARGET_BRANCH=%s\n' "${{ steps.setup.outputs.target_branch }}"
+          printf 'PAGES_BASE_URL=%s\n' "${{ inputs.pages-base-url }}"
+          printf 'COMMENT_HEADER=%s\n' "${{ inputs.comment-header }}"
+          printf 'QR_CODE=%q\n' "${{ inputs.qr-code }}"
+          printf 'UMBRELLA_DIR=%q\n' "${{ steps.setup.outputs.umbrella_dir }}"
+          printf 'COMMENT_TITLE=%q\n' "$COMMENT_TITLE"
+          printf 'COMMENT_FOOTER=%q\n' "$COMMENT_FOOTER"
+        } > "__pr_preview_payload/${{ steps.setup.outputs.meta_file }}"
+
+        echo "${{ steps.setup.outputs.pr_number }}" > "__pr_preview_payload/pr_number.txt"
+
+    - name: Upload artifact
+      if: steps.setup.outputs.deployment_action == 'upload'
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ steps.setup.outputs.artifact_name }}
+        path: __pr_preview_payload
+        if-no-files-found: error
+
+    - name: Checkout (worker)
+      if: steps.setup.outputs.deployment_action == 'worker'
+      uses: actions/checkout@v4
+      with:
+        clean: false
+
+    - name: Download artifact (worker)
+      if: steps.setup.outputs.deployment_action == 'worker'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.token }}
+        ARTIFACT_NAME: pr-preview
+      run: |
+        set -euo pipefail
+
+        if [ -z "${GITHUB_TOKEN:-}" ]; then
+          echo "token input is required for fork deploy."
+          exit 1
+        fi
+
+        API_URL="${GITHUB_API_URL:-https://api.github.com}"
+        RUN_ID="${{ github.event.workflow_run.id }}"
+        SOURCE_REPO="${{ github.event.workflow_run.repository.full_name }}"
+
+        echo "Fetching artifacts for run $RUN_ID from $SOURCE_REPO via $API_URL"
+
+        resp="$(curl -fsSL \
+          -H "Authorization: Bearer $GITHUB_TOKEN" \
+          -H "Accept: application/vnd.github+json" \
+          "$API_URL/repos/$SOURCE_REPO/actions/runs/$RUN_ID/artifacts")"
+
+        archive_url="$(python -c 'import sys, json, os
+        d=json.load(sys.stdin)
+        name=os.environ["ARTIFACT_NAME"]
+        for a in d.get("artifacts", []):
+          if a.get("name")==name:
+            print(a.get("archive_download_url",""))
+            break
+        ' <<< "$resp")"
+
+        if [ -z "$archive_url" ]; then
+          echo "Artifact '$ARTIFACT_NAME' not found in workflow run $RUN_ID"
+          echo "$resp"
+          exit 1
+        fi
+
+        rm -rf preview artifact.zip
+        mkdir -p preview
+
+        echo "Downloading artifact from $archive_url"
+        curl -fsSL -L \
+          -H "Authorization: Bearer $GITHUB_TOKEN" \
+          -H "Accept: application/vnd.github+json" \
+          -o artifact.zip \
+          "$archive_url"
+
+        unzip -q artifact.zip -d preview
+
+    - name: Read worker instructions (worker)
+      id: worker
+      if: steps.setup.outputs.deployment_action == 'worker'
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        META="preview/${{ steps.setup.outputs.meta_file }}"
+        if [ ! -f "$META" ]; then
+          echo "Missing meta file: $META"
+          exit 1
+        fi
+
+        # Load env-style meta safely
+        set -a
+        # shellcheck disable=SC1090
+        . "$META"
+        set +a
+
+        UMBRELLA_DIR="${UMBRELLA_DIR:-}"
+        PREVIEW_TARGET_FOLDER="$UMBRELLA_DIR/pr-$PR_NUMBER"
+
+        if [ -n "${PAGES_BASE_URL:-}" ]; then
+          PREVIEW_URL="${PAGES_BASE_URL%/}/$PREVIEW_TARGET_FOLDER/"
+        else
+          PREVIEW_URL="$PREVIEW_TARGET_FOLDER/"
+        fi
+
+        QR_CODE_SUFFIX=""
+        QR_CODE_INPUT="${QR_CODE:-true}"
+        if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]] && [ "$QR_CODE_INPUT" != "false" ]; then
+          QR_PROVIDER="https://qr.rossjrw.com/?color.dark=0d1117&url="
+          if [ "$QR_CODE_INPUT" != "true" ] && [ -n "$QR_CODE_INPUT" ]; then
+            QR_PROVIDER="$QR_CODE_INPUT"
+          fi
+          ENCODED_URL="$(python -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$PREVIEW_URL")"
+          QR_CODE_SUFFIX="<p><img src=\"${QR_PROVIDER}${ENCODED_URL}\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
+        fi
+
+        {
+          echo "deployment_action=$WORKER_ACTION"
+          echo "pr_number=$PR_NUMBER"
+          echo "target_repo=$TARGET_REPO"
+          echo "target_branch=$TARGET_BRANCH"
+          echo "preview_target_folder=$PREVIEW_TARGET_FOLDER"
+          echo "preview_url=$PREVIEW_URL"
+          echo "comment_header=${COMMENT_HEADER:-pr-preview}"
+          echo "qr_code_suffix=$QR_CODE_SUFFIX"
+          echo "umbrella_dir=${UMBRELLA_DIR:-}"
+          echo "comment_title=${COMMENT_TITLE:-PR Preview}"
+          echo "comment_footer=${COMMENT_FOOTER:-}"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Deploy preview
+      if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
+      uses: JamesIves/github-pages-deploy-action@v4
+      with:
+        token: ${{ inputs.token }}
+        repository-name: ${{ steps.setup.outputs.target_repo || steps.worker.outputs.target_repo }}
+        branch: ${{ steps.setup.outputs.target_branch || steps.worker.outputs.target_branch }}
+        folder: ${{ steps.setup.outputs.build_dir != '' && steps.setup.outputs.deployment_action == 'deploy' && steps.setup.outputs.build_dir || 'preview' }}
+        target-folder: ${{ steps.setup.outputs.preview_target_folder != '' && steps.setup.outputs.preview_target_folder || steps.worker.outputs.preview_target_folder }}
+        clean: false
+
+    - name: Compute comment timestamp (UTC)
+      id: comment_time
+      if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
+      shell: bash
+      run: |
+        echo "utc=$(date -u '+%Y-%m-%d %H:%M UTC')" >> "$GITHUB_OUTPUT"
+
+    - name: Update sticky PR comment (deploy)
+      if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
+      uses: marocchino/sticky-pull-request-comment@v2
+      with:
+        header: ${{ steps.setup.outputs.comment_header != '' && steps.setup.outputs.comment_header || steps.worker.outputs.comment_header }}
+        number: ${{ steps.setup.outputs.pr_number != '' && steps.setup.outputs.pr_number || steps.worker.outputs.pr_number }}
+        message: |
+          | **${{ steps.setup.outputs.comment_title != '' && steps.setup.outputs.comment_title || steps.worker.outputs.comment_title }}** |
+          | :---: |
+          | ${{ steps.worker.outputs.qr_code_suffix != '' && steps.worker.outputs.qr_code_suffix || steps.setup.outputs.qr_code_suffix }} 🚀 **View preview at:** <br> ${{ steps.setup.outputs.preview_url != '' && steps.setup.outputs.preview_url || steps.worker.outputs.preview_url }} <br><br> |
+          | Built to branch [`${{ steps.setup.outputs.target_branch != '' && steps.setup.outputs.target_branch || steps.worker.outputs.target_branch }}`](${{ github.server_url }}/${{ steps.setup.outputs.target_repo != '' && steps.setup.outputs.target_repo || steps.worker.outputs.target_repo }}/tree/${{ steps.setup.outputs.target_branch != '' && steps.setup.outputs.target_branch || steps.worker.outputs.target_branch }}) at ${{ steps.comment_time.outputs.utc }}. |
+          | ${{ steps.setup.outputs.comment_footer != '' && steps.setup.outputs.comment_footer || steps.worker.outputs.comment_footer }} |
+        GITHUB_TOKEN: ${{ inputs.token }}
+
+    - name: Checkout target repo (remove)
+      if: steps.setup.outputs.deployment_action == 'remove' || steps.worker.outputs.deployment_action == 'remove'
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ steps.setup.outputs.target_repo != '' && steps.setup.outputs.target_repo || steps.worker.outputs.target_repo }}
+        ref: ${{ steps.setup.outputs.target_branch != '' && steps.setup.outputs.target_branch || steps.worker.outputs.target_branch }}
+        token: ${{ inputs.token }}
+        fetch-depth: 0
+
+    - name: Remove preview directory (remove)
+      if: steps.setup.outputs.deployment_action == 'remove' || steps.worker.outputs.deployment_action == 'remove'
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        PREVIEW_DIR="${{ steps.setup.outputs.preview_target_folder != '' && steps.setup.outputs.preview_target_folder || steps.worker.outputs.preview_target_folder }}"
+        TARGET_BRANCH="${{ steps.setup.outputs.target_branch != '' && steps.setup.outputs.target_branch || steps.worker.outputs.target_branch }}"
+        PR_NUMBER="${{ steps.setup.outputs.pr_number != '' && steps.setup.outputs.pr_number || steps.worker.outputs.pr_number }}"
+
+        if [ -z "$PREVIEW_DIR" ] || [ "$PREVIEW_DIR" = "null" ]; then
+          echo "preview_target_folder is not set."
+          exit 1
+        fi
+
+        echo "Removing: $PREVIEW_DIR"
+        rm -rf "$PREVIEW_DIR" || true
+
+        if git status --porcelain | grep . >/dev/null 2>&1; then
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: remove pr-preview ($PREVIEW_DIR) for PR #$PR_NUMBER on $TARGET_BRANCH" || true
+          git push origin "$TARGET_BRANCH"
+        else
+          echo "Nothing to commit."
+        fi
+
+    - name: Update sticky PR comment (remove)
+      if: steps.setup.outputs.deployment_action == 'remove' || steps.worker.outputs.deployment_action == 'remove'
+      uses: marocchino/sticky-pull-request-comment@v2
+      with:
+        header: ${{ steps.setup.outputs.comment_header != '' && steps.setup.outputs.comment_header || steps.worker.outputs.comment_header }}
+        number: ${{ steps.setup.outputs.pr_number != '' && steps.setup.outputs.pr_number || steps.worker.outputs.pr_number }}
+        message: |
+          | **${{ steps.setup.outputs.comment_title != '' && steps.setup.outputs.comment_title || steps.worker.outputs.comment_title }}** |
+          | :---: |
+          | 🗑️ This PR has been closed. The preview has been removed. |
+          | ${{ steps.setup.outputs.comment_footer != '' && steps.setup.outputs.comment_footer || steps.worker.outputs.comment_footer }} |
+        recreate: true
+        GITHUB_TOKEN: ${{ inputs.token }}

@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json.schemastore.org/package",
+  "name": "pr-preview-action",
+  "private": true,
+  "description": "Tooling for the pr-preview-action repository.",
+  "author": "open-resource-discovery",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  },
+  "scripts": {
+    "lint:staged": "lint-staged",
+    "prettier": "prettier --write \"**/*.{json,yml,yaml,md}\"",
+    "prettier:ci": "prettier --check \"**/*.{json,yml,yaml,md}\"",
+    "prepare": "is-ci || husky"
+  },
+  "devDependencies": {
+    "husky": "9.1.7",
+    "is-ci": "4.1.0",
+    "lint-staged": "16.2.7",
+    "prettier": "3.7.4"
+  },
+  "lint-staged": {
+    "**/*.{json,yml,yaml,md}": [
+      "prettier --write"
+    ]
+  }
+}

@@ -1,0 +1,38 @@
+name: PR Preview
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+jobs:
+  pr-preview:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+      pull-requests: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        if: github.event.action != 'closed'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build preview
+        if: github.event.action != 'closed'
+        env:
+          BASE_URL: /<your-umbrella>/pr-${{ github.event.pull_request.number }}/
+        run: |
+          npm ci
+          npm run build
+
+      - name: PR preview
+        uses: <org>/pr-preview-action@v1
+        with:
+          fork: true
+          target-repo: <org>/<preview-repo>
+          pages-base-url: https://<org>.github.io/<preview-repo>
+          token: ${{ secrets.PR_PREVIEW_TOKEN }}
