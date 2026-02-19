@@ -1,0 +1,19 @@
+name: PR Preview (fork deploy)
+
+on:
+  workflow_run:
+    workflows: ["PR Preview"]
+    types: [completed]
+
+jobs:
+  pr-preview-fork-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: PR preview (worker)
+        uses: <org>/pr-preview-action@v1
+        with:
+          token: ${{ secrets.PR_PREVIEW_TOKEN }}
