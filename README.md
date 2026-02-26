@@ -53,7 +53,7 @@ If you only need same-repo PR previews for GitHub Pages, marketplace actions may
 | target-repo    | no       |              | Repo hosting previews. If empty, deploys to the current repository.                                                                                           |
 | target-branch  | no       | main         | Branch to deploy to.                                                                                                                                          |
 | pages-base-url | no       | ""           | Base URL used in the PR comment link.                                                                                                                         |
-| qr-code        | no       | true         | Adds a QR code to the PR comment for opening the preview on mobile. Set to `false` to disable, or provide a custom QR provider URL prefix ending with `url=`. |
+| qr-code        | no       | False        | Adds a QR code to the PR comment only if a custom QR provider URL prefix (ending with `url=`) is explicitly configured. No default external provider is used. |
 | umbrella-dir   | no       | ""           | Top-level directory inside the target repo. If not set, a smart default is chosen (see "Preview folder layout").                                              |
 | comment-\*     | no       | ...          | Sticky PR comment configuration.                                                                                                                              |
 
@@ -80,10 +80,11 @@ Examples:
 
 ## QR code in PR comment
 
-By default, the action adds a QR code next to the preview link.
+For security reasons, the action **does not ship a default external QR provider**.
+A QR code is only rendered if you explicitly configure a **custom QR provider URL prefix** (must end with `url=`).
 
-- Disable: `qr-code: false`
-- Custom provider: `qr-code: "https://your-provider/?url="` (must end with `url=`)
+- Disable (default): `qr-code: false`
+- Enable with custom provider: `qr-code: "https://your-provider/?url="`
 
 ## Example: two-workflow setup (fork-safe)
 
