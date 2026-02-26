@@ -33,9 +33,9 @@ inputs:
     default: ""
 
   qr-code:
-    description: 'Include a QR code in the PR comment. Set to "false" to disable, "true" to use default provider, or provide a provider URL prefix ending with "url=".'
+    description: 'Include a QR code in the PR comment. Set to "false" to disable, or provide a custom QR provider URL prefix ending with "url=".'
     required: false
-    default: "true"
+    default: "false"
 
   comment-header:
     description: "Header used to identify the sticky PR comment."
@@ -146,13 +146,12 @@ runs:
         fi
 
         QR_CODE_SUFFIX=""
-        if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]] && [ "$QR_CODE_INPUT" != "false" ]; then
-          QR_PROVIDER="https://qr.rossjrw.com/?color.dark=0d1117&url="
-          if [ "$QR_CODE_INPUT" != "true" ] && [ -n "$QR_CODE_INPUT" ]; then
-            QR_PROVIDER="$QR_CODE_INPUT"
+        if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]]; then
+          QR_CODE_INPUT="${QR_CODE_INPUT:-false}"
+          if [ "$QR_CODE_INPUT" != "false" ] && [ "$QR_CODE_INPUT" != "true" ] && [ -n "$QR_CODE_INPUT" ]; then
+            ENCODED_URL="$(python -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$PREVIEW_URL")"
+            QR_CODE_SUFFIX="<p><img src=\"${QR_CODE_INPUT}${ENCODED_URL}\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
           fi
-          ENCODED_URL="$(python -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$PREVIEW_URL")"
-          QR_CODE_SUFFIX="<p><img src=\"${QR_PROVIDER}${ENCODED_URL}\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
         fi
 
         # Decide action
@@ -346,14 +345,12 @@ runs:
         fi
 
         QR_CODE_SUFFIX=""
-        QR_CODE_INPUT="${QR_CODE:-true}"
-        if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]] && [ "$QR_CODE_INPUT" != "false" ]; then
-          QR_PROVIDER="https://qr.rossjrw.com/?color.dark=0d1117&url="
-          if [ "$QR_CODE_INPUT" != "true" ] && [ -n "$QR_CODE_INPUT" ]; then
-            QR_PROVIDER="$QR_CODE_INPUT"
+        QR_CODE_INPUT="${QR_CODE:-false}"
+        if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]]; then
+          if [ "$QR_CODE_INPUT" != "false" ] && [ "$QR_CODE_INPUT" != "true" ] && [ -n "$QR_CODE_INPUT" ]; then
+            ENCODED_URL="$(python -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$PREVIEW_URL")"
+            QR_CODE_SUFFIX="<p><img src=\"${QR_CODE_INPUT}${ENCODED_URL}\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
           fi
-          ENCODED_URL="$(python -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$PREVIEW_URL")"
-          QR_CODE_SUFFIX="<p><img src=\"${QR_PROVIDER}${ENCODED_URL}\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
         fi
 
         {
