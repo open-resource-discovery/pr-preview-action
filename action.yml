@@ -250,9 +250,17 @@ runs:
 
         echo "${{ steps.setup.outputs.pr_number }}" > "__pr_preview_payload/pr_number.txt"
 
-    - name: Upload artifact
-      if: steps.setup.outputs.deployment_action == 'upload'
+    - name: Upload artifact (GitHub.com)
+      if: steps.setup.outputs.deployment_action == 'upload' && github.server_url == 'https://github.com'
       uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.setup.outputs.artifact_name }}
+        path: __pr_preview_payload
+        if-no-files-found: error
+
+    - name: Upload artifact (GHES)
+      if: steps.setup.outputs.deployment_action == 'upload' && github.server_url != 'https://github.com'
+      uses: actions/upload-artifact@v3-node20
       with:
         name: ${{ steps.setup.outputs.artifact_name }}
         path: __pr_preview_payload
