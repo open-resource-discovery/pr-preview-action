@@ -1,0 +1,19 @@
+name: "Upload artifact v4"
+description: "Internal helper action for GitHub.com artifact upload."
+
+inputs:
+  name:
+    description: "Artifact name"
+    required: true
+  path:
+    description: "Path to upload"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+        if-no-files-found: error

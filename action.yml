@@ -257,21 +257,32 @@ runs:
 
         echo "${{ steps.setup.outputs.pr_number }}" > "__pr_preview_payload/pr_number.txt"
 
+    - name: Prepare artifact upload helper actions
+      if: steps.setup.outputs.deployment_action == 'upload'
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        HELPER_ROOT="$GITHUB_WORKSPACE/.pr-preview-action-helpers"
+        rm -rf "$HELPER_ROOT"
+        mkdir -p "$HELPER_ROOT"
+
+        cp -R "${{ github.action_path }}/.internal-actions/upload-artifact-v4" "$HELPER_ROOT/"
+        cp -R "${{ github.action_path }}/.internal-actions/upload-artifact-v3-node20" "$HELPER_ROOT/"
+
     - name: Upload artifact (v4)
       if: steps.setup.outputs.deployment_action == 'upload' && steps.setup.outputs.artifact_upload_action == 'v4'
-      uses: actions/upload-artifact@v4
+      uses: ./.pr-preview-action-helpers/upload-artifact-v4
       with:
         name: ${{ steps.setup.outputs.artifact_name }}
         path: __pr_preview_payload
-        if-no-files-found: error
 
     - name: Upload artifact (v3-node20)
       if: steps.setup.outputs.deployment_action == 'upload' && steps.setup.outputs.artifact_upload_action == 'v3-node20'
-      uses: actions/upload-artifact@v3-node20
+      uses: ./.pr-preview-action-helpers/upload-artifact-v3-node20
       with:
         name: ${{ steps.setup.outputs.artifact_name }}
         path: __pr_preview_payload
-        if-no-files-found: error
 
     - name: Checkout (worker)
       if: steps.setup.outputs.deployment_action == 'worker'
