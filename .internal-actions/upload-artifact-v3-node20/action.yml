@@ -1,0 +1,19 @@
+name: "Upload artifact v3-node20"
+description: "Internal helper action for GHES artifact upload."
+
+inputs:
+  name:
+    description: "Name of the artifact"
+    required: true
+  path:
+    description: "Path to the artifact"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/upload-artifact@v3-node20
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+        if-no-files-found: error
