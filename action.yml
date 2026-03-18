@@ -33,9 +33,9 @@ inputs:
     default: ""
 
   qr-code:
-    description: 'Include a QR code in the PR comment. Set to "false" to disable, or provide a custom QR provider URL prefix ending with "url=".'
+    description: 'Include an internally generated QR code in the PR comment. Set to "false" to disable.'
     required: false
-    default: "false"
+    default: "true"
 
   comment-header:
     description: "Header used to identify the sticky PR comment."
@@ -148,12 +148,9 @@ runs:
         fi
 
         QR_CODE_SUFFIX=""
-        if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]]; then
-          QR_CODE_INPUT="${QR_CODE_INPUT:-false}"
-          if [ "$QR_CODE_INPUT" != "false" ] && [ "$QR_CODE_INPUT" != "true" ] && [ -n "$QR_CODE_INPUT" ]; then
-            ENCODED_URL="$(python -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$PREVIEW_URL")"
-            QR_CODE_SUFFIX="<p><img src=\"${QR_CODE_INPUT}${ENCODED_URL}\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
-          fi
+        QR_CODE_INPUT="${QR_CODE_INPUT:-true}"
+        if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]] && [ "$QR_CODE_INPUT" != "false" ]; then
+          QR_CODE_SUFFIX="<p><img src=\"${PREVIEW_URL}__pr-preview-qr.svg\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
         fi
 
         # Decide action
@@ -236,6 +233,15 @@ runs:
         # Copy build output when available (open/sync) - closed typically has no build
         if [ "$WORKER_ACTION" = "deploy" ] && [ -d "${{ steps.setup.outputs.build_dir }}" ]; then
           cp -R "${{ steps.setup.outputs.build_dir }}/." __pr_preview_payload/
+        fi
+
+        if [ "$WORKER_ACTION" = "deploy" ] \
+          && [ "${{ inputs.qr-code }}" != "false" ] \
+          && [ -n "${{ steps.setup.outputs.preview_url }}" ] \
+          && [[ "${{ steps.setup.outputs.preview_url }}" =~ ^https?:// ]]; then
+          python "${{ github.action_path }}/.internal-tools/generate_qr_svg.py" \
+            "${{ steps.setup.outputs.preview_url }}" \
+            "__pr_preview_payload/__pr-preview-qr.svg"
         fi
 
         # Write meta for workflow_run
@@ -371,12 +377,9 @@ runs:
         fi
 
         QR_CODE_SUFFIX=""
-        QR_CODE_INPUT="${QR_CODE:-false}"
-        if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]]; then
-          if [ "$QR_CODE_INPUT" != "false" ] && [ "$QR_CODE_INPUT" != "true" ] && [ -n "$QR_CODE_INPUT" ]; then
-            ENCODED_URL="$(python -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$PREVIEW_URL")"
-            QR_CODE_SUFFIX="<p><img src=\"${QR_CODE_INPUT}${ENCODED_URL}\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
-          fi
+        QR_CODE_INPUT="${QR_CODE:-true}"
+        if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]] && [ "$QR_CODE_INPUT" != "false" ]; then
+          QR_CODE_SUFFIX="<p><img src=\"${PREVIEW_URL}__pr-preview-qr.svg\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
         fi
 
         {
@@ -392,6 +395,16 @@ runs:
           echo "comment_title=${COMMENT_TITLE:-PR Preview}"
           echo "comment_footer=${COMMENT_FOOTER:-}"
         } >> "$GITHUB_OUTPUT"
+
+    - name: Generate QR code asset (deploy)
+      if: steps.setup.outputs.deployment_action == 'deploy' && inputs.qr-code != 'false' && startsWith(steps.setup.outputs.preview_url, 'http')
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        python "${{ github.action_path }}/.internal-tools/generate_qr_svg.py" \
+          "${{ steps.setup.outputs.preview_url }}" \
+          "${{ steps.setup.outputs.build_dir }}/__pr-preview-qr.svg"
 
     - name: Deploy preview
       if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
