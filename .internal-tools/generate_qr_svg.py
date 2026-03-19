@@ -10,7 +10,7 @@ import segno  # type: ignore  # noqa: E402
 
 def main() -> int:
     if len(sys.argv) != 3:
-        print("usage: generate_qr_svg.py <url> <output-svg>", file=sys.stderr)
+        print("usage: generate_qr_svg.py <url> <output-png>", file=sys.stderr)
         return 1
 
     url = sys.argv[1].strip()
