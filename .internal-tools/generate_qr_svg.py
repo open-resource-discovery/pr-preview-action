@@ -19,7 +19,7 @@ def main() -> int:
     output.parent.mkdir(parents=True, exist_ok=True)
 
     qr = segno.make(url, error="m", micro=False)
-    qr.save(output, kind="svg", scale=4, border=2, xmldecl=False)
+    qr.save(output, kind="png", scale=4, border=2)
 
     return 0
 

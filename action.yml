@@ -150,7 +150,7 @@ runs:
         QR_CODE_SUFFIX=""
         QR_CODE_INPUT="${QR_CODE_INPUT:-true}"
         if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]] && [ "$QR_CODE_INPUT" != "false" ]; then
-          QR_CODE_SUFFIX="<p><img src=\"${PREVIEW_URL}__pr-preview-qr.svg\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
+          QR_CODE_SUFFIX="<p><img src=\"${PREVIEW_URL}__pr-preview-qr.png\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
         fi
 
         # Decide action
@@ -241,7 +241,7 @@ runs:
           && [[ "${{ steps.setup.outputs.preview_url }}" =~ ^https?:// ]]; then
           python "${{ github.action_path }}/.internal-tools/generate_qr_svg.py" \
             "${{ steps.setup.outputs.preview_url }}" \
-            "__pr_preview_payload/__pr-preview-qr.svg"
+            "__pr_preview_payload/__pr-preview-qr.png"
         fi
 
         # Write meta for workflow_run
@@ -379,7 +379,7 @@ runs:
         QR_CODE_SUFFIX=""
         QR_CODE_INPUT="${QR_CODE:-true}"
         if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]] && [ "$QR_CODE_INPUT" != "false" ]; then
-          QR_CODE_SUFFIX="<p><img src=\"${PREVIEW_URL}__pr-preview-qr.svg\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
+          QR_CODE_SUFFIX="<p><img src=\"${PREVIEW_URL}__pr-preview-qr.png\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
         fi
 
         {
@@ -404,7 +404,7 @@ runs:
 
         python "${{ github.action_path }}/.internal-tools/generate_qr_svg.py" \
           "${{ steps.setup.outputs.preview_url }}" \
-          "${{ steps.setup.outputs.build_dir }}/__pr-preview-qr.svg"
+          "${{ steps.setup.outputs.build_dir }}/__pr-preview-qr.png"
 
     - name: Deploy preview
       if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
