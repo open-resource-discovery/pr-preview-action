@@ -82,6 +82,7 @@ runs:
         PAGES_BASE_URL="${{ inputs.pages-base-url }}"
         QR_CODE_INPUT="${{ inputs.qr-code }}"
         QR_CODE_SUFFIX=""
+        QR_CODE_URL=""
         COMMENT_HEADER="${{ inputs.comment-header }}"
         PREVIEW_TARGET_FOLDER=""
         PREVIEW_URL=""
@@ -148,9 +149,12 @@ runs:
         fi
 
         QR_CODE_SUFFIX=""
+        QR_CODE_URL=""
         QR_CODE_INPUT="${QR_CODE_INPUT:-true}"
         if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]] && [ "$QR_CODE_INPUT" != "false" ]; then
-          QR_CODE_SUFFIX="<p><img src=\"${PREVIEW_URL}pr-preview-qr.png\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
+          QR_CACHE_BUSTER="$(date -u +%s)"
+          QR_CODE_URL="${PREVIEW_URL}pr-preview-qr.png?v=${QR_CACHE_BUSTER}"
+          QR_CODE_SUFFIX="<p><img src=\"${QR_CODE_URL}\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
         fi
 
         # Decide action
@@ -197,6 +201,7 @@ runs:
           echo "preview_target_folder=$PREVIEW_TARGET_FOLDER"
           echo "preview_url=$PREVIEW_URL"
           echo "qr_code_suffix=$QR_CODE_SUFFIX"
+          echo "qr_code_url=$QR_CODE_URL"
           echo "comment_header=$COMMENT_HEADER"
           echo "comment_title=$COMMENT_TITLE"
           echo "comment_footer=$COMMENT_FOOTER"
@@ -213,6 +218,7 @@ runs:
         echo "deployment_action=${{ steps.setup.outputs.deployment_action }}"
         echo "target_repo=${{ steps.setup.outputs.target_repo }}"
         echo "preview_url=${{ steps.setup.outputs.preview_url }}"
+        echo "qr_code_url=${{ steps.setup.outputs.qr_code_url }}"
 
     - name: Prepare + upload artifact (fork PR -> worker instructions)
       if: steps.setup.outputs.deployment_action == 'upload'
@@ -377,9 +383,12 @@ runs:
         fi
 
         QR_CODE_SUFFIX=""
+        QR_CODE_URL=""
         QR_CODE_INPUT="${QR_CODE:-true}"
         if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]] && [ "$QR_CODE_INPUT" != "false" ]; then
-          QR_CODE_SUFFIX="<p><img src=\"${PREVIEW_URL}pr-preview-qr.png\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
+          QR_CACHE_BUSTER="$(date -u +%s)"
+          QR_CODE_URL="${PREVIEW_URL}pr-preview-qr.png?v=${QR_CACHE_BUSTER}"
+          QR_CODE_SUFFIX="<p><img src=\"${QR_CODE_URL}\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
         fi
 
         {
@@ -391,6 +400,7 @@ runs:
           echo "preview_url=$PREVIEW_URL"
           echo "comment_header=${COMMENT_HEADER:-pr-preview}"
           echo "qr_code_suffix=$QR_CODE_SUFFIX"
+          echo "qr_code_url=$QR_CODE_URL"
           echo "umbrella_dir=${UMBRELLA_DIR:-}"
           echo "comment_title=${COMMENT_TITLE:-PR Preview}"
           echo "comment_footer=${COMMENT_FOOTER:-}"
@@ -422,23 +432,24 @@ runs:
       shell: bash
       env:
         PREVIEW_URL: ${{ steps.setup.outputs.preview_url != '' && steps.setup.outputs.preview_url || steps.worker.outputs.preview_url }}
+        QR_CODE_URL: ${{ steps.setup.outputs.qr_code_url != '' && steps.setup.outputs.qr_code_url || steps.worker.outputs.qr_code_url }}
         QR_CODE_ENABLED: ${{ inputs.qr-code }}
       run: |
         set -euo pipefail
 
         CHECK_URL="$PREVIEW_URL"
-        if [ "${QR_CODE_ENABLED:-false}" != "false" ]; then
-          CHECK_URL="${PREVIEW_URL}pr-preview-qr.png"
+        if [ "${QR_CODE_ENABLED:-false}" != "false" ] && [ -n "${QR_CODE_URL:-}" ]; then
+          CHECK_URL="$QR_CODE_URL"
         fi
 
         echo "Waiting for asset to become reachable: $CHECK_URL"
 
-        for i in $(seq 1 24); do
+        for i in $(seq 1 36); do
           if curl -fsSL -o /dev/null "$CHECK_URL"; then
             echo "Preview asset is reachable."
             exit 0
           fi
-          echo "Not reachable yet (attempt $i/24), waiting 5s..."
+          echo "Not reachable yet (attempt $i/36), waiting 5s..."
           sleep 5
         done
 
