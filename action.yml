@@ -417,6 +417,34 @@ runs:
         target-folder: ${{ steps.setup.outputs.preview_target_folder != '' && steps.setup.outputs.preview_target_folder || steps.worker.outputs.preview_target_folder }}
         clean: false
 
+    - name: Wait for preview assets to be reachable
+      if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
+      shell: bash
+      env:
+        PREVIEW_URL: ${{ steps.setup.outputs.preview_url != '' && steps.setup.outputs.preview_url || steps.worker.outputs.preview_url }}
+        QR_CODE_ENABLED: ${{ inputs.qr-code }}
+      run: |
+        set -euo pipefail
+
+        CHECK_URL="$PREVIEW_URL"
+        if [ "${QR_CODE_ENABLED:-false}" != "false" ]; then
+          CHECK_URL="${PREVIEW_URL}pr-preview-qr.png"
+        fi
+
+        echo "Waiting for asset to become reachable: $CHECK_URL"
+
+        for i in $(seq 1 24); do
+          if curl -fsSL -o /dev/null "$CHECK_URL"; then
+            echo "Preview asset is reachable."
+            exit 0
+          fi
+          echo "Not reachable yet (attempt $i/24), waiting 5s..."
+          sleep 5
+        done
+
+        echo "Timed out waiting for preview asset: $CHECK_URL"
+        exit 1
+
     - name: Compute comment timestamp (UTC)
       id: comment_time
       if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
