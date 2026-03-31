@@ -57,11 +57,6 @@ inputs:
     required: false
     default: ""
 
-  wait-initial-delay-seconds:
-    description: "Initial delay before checking whether the preview asset is reachable."
-    required: false
-    default: "15"
-
   wait-poll-attempts:
     description: "Maximum number of reachability check attempts."
     required: false
@@ -71,11 +66,6 @@ inputs:
     description: "Seconds to wait between reachability check attempts."
     required: false
     default: "5"
-
-  qr-wait-initial-delay-seconds:
-    description: "Extra delay before checking the QR asset after the preview is already reachable."
-    required: false
-    default: "20"
 
   qr-wait-poll-attempts:
     description: "Maximum number of QR asset validation attempts."
@@ -464,114 +454,50 @@ runs:
         target-folder: ${{ steps.setup.outputs.preview_target_folder != '' && steps.setup.outputs.preview_target_folder || steps.worker.outputs.preview_target_folder }}
         clean: false
 
-    - name: Wait for preview assets to be reachable
+    - name: Wait for preview URL
+      if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
+      uses: Jtalk/url-health-check-action@e7d5ebdc9027fbf494d2d034f3e8fc78f8b7a2b9
+      with:
+        url: ${{ steps.setup.outputs.preview_url != '' && steps.setup.outputs.preview_url || steps.worker.outputs.preview_url }}
+        follow-redirect: true
+        max-attempts: ${{ inputs.wait-poll-attempts }}
+        retry-delay: "${{ inputs.wait-poll-interval-seconds }}s"
+        retry-all: true
+
+    - name: Wait for QR asset (public GitHub only, best effort)
+      id: qr_health_public
+      if: (steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy') && inputs.qr-code != 'false' && github.server_url == 'https://github.com'
+      continue-on-error: true
+      uses: Jtalk/url-health-check-action@e7d5ebdc9027fbf494d2d034f3e8fc78f8b7a2b9
+      with:
+        url: ${{ steps.setup.outputs.qr_code_check_url != '' && steps.setup.outputs.qr_code_check_url || steps.worker.outputs.qr_code_check_url }}
+        follow-redirect: true
+        max-attempts: ${{ inputs.qr-wait-poll-attempts }}
+        retry-delay: "${{ inputs.qr-wait-poll-interval-seconds }}s"
+        retry-all: true
+
+    - name: Resolve QR code suffix
       id: asset_wait
       if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
       shell: bash
       env:
-        PREVIEW_URL: ${{ steps.setup.outputs.preview_url != '' && steps.setup.outputs.preview_url || steps.worker.outputs.preview_url }}
-        QR_CODE_URL: ${{ steps.setup.outputs.qr_code_url != '' && steps.setup.outputs.qr_code_url || steps.worker.outputs.qr_code_url }}
-        QR_CODE_CHECK_URL: ${{ steps.setup.outputs.qr_code_check_url != '' && steps.setup.outputs.qr_code_check_url || steps.worker.outputs.qr_code_check_url }}
-        QR_CODE_ENABLED: ${{ inputs.qr-code }}
         DEFAULT_QR_CODE_SUFFIX: ${{ steps.worker.outputs.qr_code_suffix != '' && steps.worker.outputs.qr_code_suffix || steps.setup.outputs.qr_code_suffix }}
-        INITIAL_DELAY_SECONDS: ${{ inputs.wait-initial-delay-seconds }}
-        POLL_ATTEMPTS: ${{ inputs.wait-poll-attempts }}
-        POLL_INTERVAL_SECONDS: ${{ inputs.wait-poll-interval-seconds }}
-        QR_INITIAL_DELAY_SECONDS: ${{ inputs.qr-wait-initial-delay-seconds }}
-        QR_POLL_ATTEMPTS: ${{ inputs.qr-wait-poll-attempts }}
-        QR_POLL_INTERVAL_SECONDS: ${{ inputs.qr-wait-poll-interval-seconds }}
+        QR_CODE_ENABLED: ${{ inputs.qr-code }}
+        PUBLIC_QR_CHECK_OUTCOME: ${{ steps.qr_health_public.outcome }}
+        SERVER_URL: ${{ github.server_url }}
       run: |
         set -euo pipefail
 
-        TMP_FILE="$(mktemp)"
-        HEADER_FILE="$(mktemp)"
-        trap 'rm -f "$TMP_FILE" "$HEADER_FILE"' EXIT
-
         FINAL_QR_CODE_SUFFIX="$DEFAULT_QR_CODE_SUFFIX"
 
-        if [[ ! "${PREVIEW_URL:-}" =~ ^https?:// ]]; then
-          echo "Preview URL is not absolute. Skipping reachability checks."
-          {
-            echo "qr_code_suffix<<EOF"
-            printf '%s\n' "$FINAL_QR_CODE_SUFFIX"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
-
-        echo "Waiting for preview to become reachable: $PREVIEW_URL"
-        echo "Initial delay: ${INITIAL_DELAY_SECONDS}s"
-
-        sleep "${INITIAL_DELAY_SECONDS}"
-
-        PREVIEW_READY="false"
-        for i in $(seq 1 "${POLL_ATTEMPTS}"); do
-          if curl -fsSL "$PREVIEW_URL" -o "$TMP_FILE" && [ -s "$TMP_FILE" ]; then
-            echo "Preview is reachable."
-            PREVIEW_READY="true"
-            break
-          fi
-
-          echo "Preview not reachable yet (attempt $i/${POLL_ATTEMPTS})."
-          echo "Waiting ${POLL_INTERVAL_SECONDS}s before retry..."
-          sleep "${POLL_INTERVAL_SECONDS}"
-        done
-
-        if [ "$PREVIEW_READY" != "true" ]; then
-          echo "Timed out waiting for preview: $PREVIEW_URL"
-          exit 1
-        fi
-
-        if [ "${QR_CODE_ENABLED:-false}" != "false" ] && [[ "${QR_CODE_URL:-}" =~ ^https?:// ]]; then
-          CHECK_QR_URL="${QR_CODE_CHECK_URL:-$QR_CODE_URL}"
-          echo "Checking QR asset (best effort): $CHECK_QR_URL"
-          echo "QR initial delay: ${QR_INITIAL_DELAY_SECONDS}s"
-
-          sleep "${QR_INITIAL_DELAY_SECONDS}"
-
-          QR_READY="false"
-          QR_INTERVAL="${QR_POLL_INTERVAL_SECONDS}"
-          QR_DEBUG_PRINTED="false"
-
-          for i in $(seq 1 "${QR_POLL_ATTEMPTS}"); do
-            : > "$HEADER_FILE"
-            HTTP_CODE="$(curl --compressed -sSL -D "$HEADER_FILE" -o "$TMP_FILE" -w '%{http_code}' "$CHECK_QR_URL" || true)"
-
-            if [ "$HTTP_CODE" = "200" ] && [ -s "$TMP_FILE" ]; then
-              if python -c 'import gzip, sys; data=open(sys.argv[1],"rb").read(); png=b"\x89PNG\r\n\x1a\n"; ok=data.startswith(png); ok = ok or (data.startswith(b"\x1f\x8b") and (lambda d: d.startswith(png))(gzip.decompress(data))); sys.exit(0 if ok else 1)' "$TMP_FILE"; then
-                echo "QR asset is reachable and valid."
-                QR_READY="true"
-                break
-              fi
-
-              if [ "$QR_DEBUG_PRINTED" != "true" ]; then
-                echo "QR asset returned HTTP 200 but did not match PNG validation."
-                echo "Response headers:"
-                sed -n '1,20p' "$HEADER_FILE" || true
-                python -c 'import binascii, sys; data=open(sys.argv[1],"rb").read(32); print("First 32 bytes (hex):", binascii.hexlify(data).decode())' "$TMP_FILE"
-                QR_DEBUG_PRINTED="true"
-              fi
-
-              echo "QR asset responded with 200 but is not a valid PNG yet (attempt $i/${QR_POLL_ATTEMPTS})."
-            elif [ "$HTTP_CODE" = "429" ]; then
-              echo "QR asset returned 429 rate limit (attempt $i/${QR_POLL_ATTEMPTS})."
-              QR_INTERVAL=$(( QR_INTERVAL < 30 ? QR_INTERVAL * 2 : QR_INTERVAL ))
-            elif [ -n "$HTTP_CODE" ] && [ "$HTTP_CODE" != "000" ]; then
-              echo "QR asset returned HTTP $HTTP_CODE (attempt $i/${QR_POLL_ATTEMPTS})."
-            else
-              echo "QR asset request failed (attempt $i/${QR_POLL_ATTEMPTS})."
-            fi
-
-            if [ "$i" -lt "${QR_POLL_ATTEMPTS}" ]; then
-              echo "Waiting ${QR_INTERVAL}s before next QR retry..."
-              sleep "${QR_INTERVAL}"
-            fi
-          done
-
-          if [ "$QR_READY" != "true" ]; then
-            echo "QR asset is still not valid. Continuing without QR image in comment."
-            FINAL_QR_CODE_SUFFIX=""
-          fi
+        if [ "${QR_CODE_ENABLED:-false}" = "false" ]; then
+          FINAL_QR_CODE_SUFFIX=""
+        elif [ "$SERVER_URL" != "https://github.com" ]; then
+          echo "Skipping runner-side QR validation on non-public GitHub."
+          echo "Keeping QR image in comment because access-controlled Pages may redirect the runner to login."
+        elif [ "${PUBLIC_QR_CHECK_OUTCOME:-success}" != "success" ]; then
+          echo "Public QR health check did not pass. Continuing without QR image in comment."
+          FINAL_QR_CODE_SUFFIX=""
         fi
 
         {
