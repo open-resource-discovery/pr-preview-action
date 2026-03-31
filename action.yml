@@ -57,6 +57,21 @@ inputs:
     required: false
     default: ""
 
+  wait-initial-delay-seconds:
+    description: "Initial delay before checking whether the preview asset is reachable."
+    required: false
+    default: "15"
+
+  wait-poll-attempts:
+    description: "Maximum number of reachability check attempts."
+    required: false
+    default: "36"
+
+  wait-poll-interval-seconds:
+    description: "Seconds to wait between reachability check attempts."
+    required: false
+    default: "5"
+
 runs:
   using: "composite"
   steps:
@@ -434,23 +449,57 @@ runs:
         PREVIEW_URL: ${{ steps.setup.outputs.preview_url != '' && steps.setup.outputs.preview_url || steps.worker.outputs.preview_url }}
         QR_CODE_URL: ${{ steps.setup.outputs.qr_code_url != '' && steps.setup.outputs.qr_code_url || steps.worker.outputs.qr_code_url }}
         QR_CODE_ENABLED: ${{ inputs.qr-code }}
+        INITIAL_DELAY_SECONDS: ${{ inputs.wait-initial-delay-seconds }}
+        POLL_ATTEMPTS: ${{ inputs.wait-poll-attempts }}
+        POLL_INTERVAL_SECONDS: ${{ inputs.wait-poll-interval-seconds }}
       run: |
         set -euo pipefail
 
         CHECK_URL="$PREVIEW_URL"
+        CHECK_KIND="preview"
         if [ "${QR_CODE_ENABLED:-false}" != "false" ] && [ -n "${QR_CODE_URL:-}" ]; then
           CHECK_URL="$QR_CODE_URL"
+          CHECK_KIND="qr"
         fi
 
-        echo "Waiting for asset to become reachable: $CHECK_URL"
+        TMP_FILE="$(mktemp)"
+        trap 'rm -f "$TMP_FILE"' EXIT
 
-        for i in $(seq 1 36); do
-          if curl -fsSL -o /dev/null "$CHECK_URL"; then
-            echo "Preview asset is reachable."
-            exit 0
+        echo "Waiting for asset to become reachable: $CHECK_URL"
+        echo "Initial delay: ${INITIAL_DELAY_SECONDS}s"
+
+        sleep "${INITIAL_DELAY_SECONDS}"
+
+        for i in $(seq 1 "${POLL_ATTEMPTS}"); do
+          if curl -fsSL "$CHECK_URL" -o "$TMP_FILE"; then
+            if [ -s "$TMP_FILE" ]; then
+              if [ "$CHECK_KIND" = "qr" ]; then
+                if python - "$TMP_FILE" <<'PY'
+                  import sys
+                  from pathlib import Path
+
+                  path = Path(sys.argv[1])
+                  signature = path.read_bytes()[:8]
+                  sys.exit(0 if signature == b"\x89PNG\r\n\x1a\n" else 1)
+                  PY
+                then
+                  echo "Preview QR asset is reachable and valid."
+                  exit 0
+                fi
+                echo "Asset responded but is not a valid PNG yet (attempt $i/${POLL_ATTEMPTS})."
+              else
+                echo "Preview asset is reachable and non-empty."
+                exit 0
+              fi
+            else
+              echo "Asset responded but is empty (attempt $i/${POLL_ATTEMPTS})."
+            fi
+          else
+            echo "Not reachable yet (attempt $i/${POLL_ATTEMPTS})."
           fi
-          echo "Not reachable yet (attempt $i/36), waiting 5s..."
-          sleep 5
+
+          echo "Waiting ${POLL_INTERVAL_SECONDS}s before retry..."
+          sleep "${POLL_INTERVAL_SECONDS}"
         done
 
         echo "Timed out waiting for preview asset: $CHECK_URL"
