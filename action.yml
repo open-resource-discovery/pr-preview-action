@@ -456,25 +456,103 @@ runs:
 
     - name: Wait for preview URL
       if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
-      uses: Jtalk/url-health-check-action@e7d5ebdc9027fbf494d2d034f3e8fc78f8b7a2b9
+      uses: actions/github-script@v8
+      env:
+        PREVIEW_URL: ${{ steps.setup.outputs.preview_url != '' && steps.setup.outputs.preview_url || steps.worker.outputs.preview_url }}
+        POLL_ATTEMPTS: ${{ inputs.wait-poll-attempts }}
+        POLL_INTERVAL_SECONDS: ${{ inputs.wait-poll-interval-seconds }}
       with:
-        url: ${{ steps.setup.outputs.preview_url != '' && steps.setup.outputs.preview_url || steps.worker.outputs.preview_url }}
-        follow-redirect: true
-        max-attempts: ${{ inputs.wait-poll-attempts }}
-        retry-delay: "${{ inputs.wait-poll-interval-seconds }}s"
-        retry-all: true
+        script: |
+          const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-    - name: Wait for QR asset (public GitHub only, best effort)
+          const previewUrl = process.env.PREVIEW_URL || "";
+          const attempts = Number(process.env.POLL_ATTEMPTS || "36");
+          const intervalMs = Number(process.env.POLL_INTERVAL_SECONDS || "5") * 1000;
+
+          if (!/^https?:\/\//.test(previewUrl)) {
+            core.info("Preview URL is not absolute. Skipping preview wait.");
+            return;
+          }
+
+          let ready = false;
+
+          for (let i = 1; i <= attempts; i++) {
+            try {
+              const response = await fetch(previewUrl, { redirect: "follow" });
+              const body = await response.text();
+
+              if (response.ok && body.length > 0) {
+                core.info(`Preview is reachable (attempt ${i}/${attempts}).`);
+                ready = true;
+                break;
+              }
+
+              core.info(`Preview returned status ${response.status} (attempt ${i}/${attempts}).`);
+            } catch (error) {
+              core.info(`Preview check failed (attempt ${i}/${attempts}): ${error.message}`);
+            }
+
+            if (i < attempts) {
+              core.info(`Waiting ${intervalMs / 1000}s before next preview retry...`);
+              await sleep(intervalMs);
+            }
+          }
+
+          if (!ready) {
+            core.setFailed(`Timed out waiting for preview: ${previewUrl}`);
+          }
+
+    - name: Wait for QR asset (public GitHub only)
       id: qr_health_public
       if: (steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy') && inputs.qr-code != 'false' && github.server_url == 'https://github.com'
       continue-on-error: true
-      uses: Jtalk/url-health-check-action@e7d5ebdc9027fbf494d2d034f3e8fc78f8b7a2b9
+      uses: actions/github-script@v8
+      env:
+        QR_CODE_CHECK_URL: ${{ steps.setup.outputs.qr_code_check_url != '' && steps.setup.outputs.qr_code_check_url || steps.worker.outputs.qr_code_check_url }}
+        QR_POLL_ATTEMPTS: ${{ inputs.qr-wait-poll-attempts }}
+        QR_POLL_INTERVAL_SECONDS: ${{ inputs.qr-wait-poll-interval-seconds }}
       with:
-        url: ${{ steps.setup.outputs.qr_code_check_url != '' && steps.setup.outputs.qr_code_check_url || steps.worker.outputs.qr_code_check_url }}
-        follow-redirect: true
-        max-attempts: ${{ inputs.qr-wait-poll-attempts }}
-        retry-delay: "${{ inputs.qr-wait-poll-interval-seconds }}s"
-        retry-all: true
+        script: |
+          const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+          const qrUrl = process.env.QR_CODE_CHECK_URL || "";
+          const attempts = Number(process.env.QR_POLL_ATTEMPTS || "12");
+          const intervalMs = Number(process.env.QR_POLL_INTERVAL_SECONDS || "10") * 1000;
+          const pngMagic = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+
+          if (!/^https?:\/\//.test(qrUrl)) {
+            core.info("QR URL is not absolute. Skipping public QR validation.");
+            return;
+          }
+
+          let ready = false;
+
+          for (let i = 1; i <= attempts; i++) {
+            try {
+              const response = await fetch(qrUrl, { redirect: "follow" });
+              const contentType = (response.headers.get("content-type") || "").toLowerCase();
+              const buffer = Buffer.from(await response.arrayBuffer());
+
+              if (response.ok && buffer.length >= 8 && buffer.subarray(0, 8).equals(pngMagic)) {
+                core.info(`QR asset is reachable and valid (attempt ${i}/${attempts}).`);
+                ready = true;
+                break;
+              }
+
+              core.info(`QR check attempt ${i}/${attempts}: status=${response.status}, content-type=${contentType}`);
+            } catch (error) {
+              core.info(`QR check failed (attempt ${i}/${attempts}): ${error.message}`);
+            }
+
+            if (i < attempts) {
+              core.info(`Waiting ${intervalMs / 1000}s before next QR retry...`);
+              await sleep(intervalMs);
+            }
+          }
+
+          if (!ready) {
+            core.setFailed(`Timed out waiting for public QR asset: ${qrUrl}`);
+          }
 
     - name: Resolve QR code suffix
       id: asset_wait
