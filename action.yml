@@ -443,59 +443,89 @@ runs:
         clean: false
 
     - name: Wait for preview assets to be reachable
+      id: asset_wait
       if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
       shell: bash
       env:
         PREVIEW_URL: ${{ steps.setup.outputs.preview_url != '' && steps.setup.outputs.preview_url || steps.worker.outputs.preview_url }}
         QR_CODE_URL: ${{ steps.setup.outputs.qr_code_url != '' && steps.setup.outputs.qr_code_url || steps.worker.outputs.qr_code_url }}
         QR_CODE_ENABLED: ${{ inputs.qr-code }}
+        DEFAULT_QR_CODE_SUFFIX: ${{ steps.worker.outputs.qr_code_suffix != '' && steps.worker.outputs.qr_code_suffix || steps.setup.outputs.qr_code_suffix }}
         INITIAL_DELAY_SECONDS: ${{ inputs.wait-initial-delay-seconds }}
         POLL_ATTEMPTS: ${{ inputs.wait-poll-attempts }}
         POLL_INTERVAL_SECONDS: ${{ inputs.wait-poll-interval-seconds }}
       run: |
         set -euo pipefail
 
-        CHECK_URL="$PREVIEW_URL"
-        CHECK_KIND="preview"
-        if [ "${QR_CODE_ENABLED:-false}" != "false" ] && [ -n "${QR_CODE_URL:-}" ]; then
-          CHECK_URL="$QR_CODE_URL"
-          CHECK_KIND="qr"
-        fi
-
         TMP_FILE="$(mktemp)"
         trap 'rm -f "$TMP_FILE"' EXIT
 
-        echo "Waiting for asset to become reachable: $CHECK_URL"
+        FINAL_QR_CODE_SUFFIX="$DEFAULT_QR_CODE_SUFFIX"
+
+        if [[ ! "${PREVIEW_URL:-}" =~ ^https?:// ]]; then
+          echo "Preview URL is not absolute. Skipping reachability checks."
+          {
+            echo "qr_code_suffix<<EOF"
+            printf '%s\n' "$FINAL_QR_CODE_SUFFIX"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        echo "Waiting for preview to become reachable: $PREVIEW_URL"
         echo "Initial delay: ${INITIAL_DELAY_SECONDS}s"
 
         sleep "${INITIAL_DELAY_SECONDS}"
 
+        PREVIEW_READY="false"
         for i in $(seq 1 "${POLL_ATTEMPTS}"); do
-          if curl -fsSL "$CHECK_URL" -o "$TMP_FILE"; then
-            if [ -s "$TMP_FILE" ]; then
-              if [ "$CHECK_KIND" = "qr" ]; then
-                if python -c 'import sys; data=open(sys.argv[1],"rb").read(8); sys.exit(0 if data==b"\x89PNG\r\n\x1a\n" else 1)' "$TMP_FILE"; then
-                  echo "Preview QR asset is reachable and valid."
-                  exit 0
-                fi
-                echo "Asset responded but is not a valid PNG yet (attempt $i/${POLL_ATTEMPTS})."
-              else
-                echo "Preview asset is reachable and non-empty."
-                exit 0
-              fi
-            else
-              echo "Asset responded but is empty (attempt $i/${POLL_ATTEMPTS})."
-            fi
-          else
-            echo "Not reachable yet (attempt $i/${POLL_ATTEMPTS})."
+          if curl -fsSL "$PREVIEW_URL" -o "$TMP_FILE" && [ -s "$TMP_FILE" ]; then
+            echo "Preview is reachable."
+            PREVIEW_READY="true"
+            break
           fi
 
+          echo "Preview not reachable yet (attempt $i/${POLL_ATTEMPTS})."
           echo "Waiting ${POLL_INTERVAL_SECONDS}s before retry..."
           sleep "${POLL_INTERVAL_SECONDS}"
         done
 
-        echo "Timed out waiting for preview asset: $CHECK_URL"
-        exit 1
+        if [ "$PREVIEW_READY" != "true" ]; then
+          echo "Timed out waiting for preview: $PREVIEW_URL"
+          exit 1
+        fi
+
+        if [ "${QR_CODE_ENABLED:-false}" != "false" ] && [[ "${QR_CODE_URL:-}" =~ ^https?:// ]]; then
+          echo "Checking QR asset (best effort): $QR_CODE_URL"
+
+          QR_READY="false"
+          for i in $(seq 1 "${POLL_ATTEMPTS}"); do
+            if curl -fsSL "$QR_CODE_URL" -o "$TMP_FILE" && [ -s "$TMP_FILE" ]; then
+              if python -c 'import sys; data=open(sys.argv[1],"rb").read(8); sys.exit(0 if data==b"\x89PNG\r\n\x1a\n" else 1)' "$TMP_FILE"; then
+                echo "QR asset is reachable and valid."
+                QR_READY="true"
+                break
+              fi
+              echo "QR asset responded but is not a valid PNG yet (attempt $i/${POLL_ATTEMPTS})."
+            else
+              echo "QR asset not reachable yet (attempt $i/${POLL_ATTEMPTS})."
+            fi
+
+            echo "Waiting ${POLL_INTERVAL_SECONDS}s before retry..."
+            sleep "${POLL_INTERVAL_SECONDS}"
+          done
+
+          if [ "$QR_READY" != "true" ]; then
+            echo "QR asset is still not valid. Continuing without QR image in comment."
+            FINAL_QR_CODE_SUFFIX=""
+          fi
+        fi
+
+        {
+          echo "qr_code_suffix<<EOF"
+          printf '%s\n' "$FINAL_QR_CODE_SUFFIX"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
 
     - name: Compute comment timestamp (UTC)
       id: comment_time
@@ -513,7 +543,7 @@ runs:
         message: |
           | **${{ steps.setup.outputs.comment_title != '' && steps.setup.outputs.comment_title || steps.worker.outputs.comment_title }}** |
           | :---: |
-          | ${{ steps.worker.outputs.qr_code_suffix != '' && steps.worker.outputs.qr_code_suffix || steps.setup.outputs.qr_code_suffix }} 🚀 **View preview at:** <br> ${{ steps.setup.outputs.preview_url != '' && steps.setup.outputs.preview_url || steps.worker.outputs.preview_url }} <br><br> |
+          | ${{ steps.asset_wait.outputs.qr_code_suffix }} 🚀 **View preview at:** <br> ${{ steps.setup.outputs.preview_url != '' && steps.setup.outputs.preview_url || steps.worker.outputs.preview_url }} <br><br> |
           | Built to branch [`${{ steps.setup.outputs.target_branch != '' && steps.setup.outputs.target_branch || steps.worker.outputs.target_branch }}`](${{ github.server_url }}/${{ steps.setup.outputs.target_repo != '' && steps.setup.outputs.target_repo || steps.worker.outputs.target_repo }}/tree/${{ steps.setup.outputs.target_branch != '' && steps.setup.outputs.target_branch || steps.worker.outputs.target_branch }}) at ${{ steps.comment_time.outputs.utc }}. |
           | ${{ steps.setup.outputs.comment_footer != '' && steps.setup.outputs.comment_footer || steps.worker.outputs.comment_footer }} |
         GITHUB_TOKEN: ${{ inputs.token }}
