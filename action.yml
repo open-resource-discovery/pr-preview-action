@@ -72,6 +72,21 @@ inputs:
     required: false
     default: "5"
 
+  qr-wait-initial-delay-seconds:
+    description: "Extra delay before checking the QR asset after the preview is already reachable."
+    required: false
+    default: "20"
+
+  qr-wait-poll-attempts:
+    description: "Maximum number of QR asset validation attempts."
+    required: false
+    default: "12"
+
+  qr-wait-poll-interval-seconds:
+    description: "Seconds to wait between QR asset validation attempts."
+    required: false
+    default: "10"
+
 runs:
   using: "composite"
   steps:
@@ -454,6 +469,9 @@ runs:
         INITIAL_DELAY_SECONDS: ${{ inputs.wait-initial-delay-seconds }}
         POLL_ATTEMPTS: ${{ inputs.wait-poll-attempts }}
         POLL_INTERVAL_SECONDS: ${{ inputs.wait-poll-interval-seconds }}
+        QR_INITIAL_DELAY_SECONDS: ${{ inputs.qr-wait-initial-delay-seconds }}
+        QR_POLL_ATTEMPTS: ${{ inputs.qr-wait-poll-attempts }}
+        QR_POLL_INTERVAL_SECONDS: ${{ inputs.qr-wait-poll-interval-seconds }}
       run: |
         set -euo pipefail
 
@@ -497,22 +515,37 @@ runs:
 
         if [ "${QR_CODE_ENABLED:-false}" != "false" ] && [[ "${QR_CODE_URL:-}" =~ ^https?:// ]]; then
           echo "Checking QR asset (best effort): $QR_CODE_URL"
+          echo "QR initial delay: ${QR_INITIAL_DELAY_SECONDS}s"
+
+          sleep "${QR_INITIAL_DELAY_SECONDS}"
 
           QR_READY="false"
-          for i in $(seq 1 "${POLL_ATTEMPTS}"); do
-            if curl -fsSL "$QR_CODE_URL" -o "$TMP_FILE" && [ -s "$TMP_FILE" ]; then
+          QR_INTERVAL="${QR_POLL_INTERVAL_SECONDS}"
+
+          for i in $(seq 1 "${QR_POLL_ATTEMPTS}"); do
+            HTTP_CODE="$(curl -sSL -o "$TMP_FILE" -w '%{http_code}' "$QR_CODE_URL" || true)"
+
+            if [ "$HTTP_CODE" = "200" ] && [ -s "$TMP_FILE" ]; then
               if python -c 'import sys; data=open(sys.argv[1],"rb").read(8); sys.exit(0 if data==b"\x89PNG\r\n\x1a\n" else 1)' "$TMP_FILE"; then
                 echo "QR asset is reachable and valid."
                 QR_READY="true"
                 break
               fi
-              echo "QR asset responded but is not a valid PNG yet (attempt $i/${POLL_ATTEMPTS})."
+
+              echo "QR asset responded with 200 but is not a valid PNG yet (attempt $i/${QR_POLL_ATTEMPTS})."
+            elif [ "$HTTP_CODE" = "429" ]; then
+              echo "QR asset returned 429 rate limit (attempt $i/${QR_POLL_ATTEMPTS})."
+              QR_INTERVAL=$(( QR_INTERVAL < 30 ? QR_INTERVAL * 2 : QR_INTERVAL ))
+            elif [ -n "$HTTP_CODE" ] && [ "$HTTP_CODE" != "000" ]; then
+              echo "QR asset returned HTTP $HTTP_CODE (attempt $i/${QR_POLL_ATTEMPTS})."
             else
-              echo "QR asset not reachable yet (attempt $i/${POLL_ATTEMPTS})."
+              echo "QR asset request failed (attempt $i/${QR_POLL_ATTEMPTS})."
             fi
 
-            echo "Waiting ${POLL_INTERVAL_SECONDS}s before retry..."
-            sleep "${POLL_INTERVAL_SECONDS}"
+            if [ "$i" -lt "${QR_POLL_ATTEMPTS}" ]; then
+              echo "Waiting ${QR_INTERVAL}s before next QR retry..."
+              sleep "${QR_INTERVAL}"
+            fi
           done
 
           if [ "$QR_READY" != "true" ]; then
