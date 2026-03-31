@@ -174,9 +174,24 @@ runs:
         QR_CODE_CHECK_URL=""
         QR_CODE_INPUT="${QR_CODE_INPUT:-true}"
         if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]] && [ "$QR_CODE_INPUT" != "false" ]; then
-          QR_CACHE_BUSTER="$(date -u +%s)"
           QR_CODE_CHECK_URL="${PREVIEW_URL}pr-preview-qr.png"
-          QR_CODE_URL="${QR_CODE_CHECK_URL}?v=${QR_CACHE_BUSTER}"
+
+          if [ "$SERVER_URL" = "https://github.com" ]; then
+            QR_CACHE_BUSTER="$(date -u +%s)"
+            QR_CODE_URL="${QR_CODE_CHECK_URL}?v=${QR_CACHE_BUSTER}"
+          else
+            QR_IMAGE_REPO="$TARGET_REPO"
+            if [ -z "$QR_IMAGE_REPO" ]; then
+              QR_IMAGE_REPO="$REPO_NAME"
+            fi
+
+            if [ "$QR_IMAGE_REPO" = "$REPO_NAME" ]; then
+              QR_CODE_URL="../blob/${TARGET_BRANCH}/${PREVIEW_TARGET_FOLDER}/pr-preview-qr.png?raw=true"
+            else
+              QR_CODE_URL="../../../${QR_IMAGE_REPO}/blob/${TARGET_BRANCH}/${PREVIEW_TARGET_FOLDER}/pr-preview-qr.png?raw=true"
+            fi
+          fi
+
           QR_CODE_SUFFIX="<p><img src=\"${QR_CODE_URL}\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
         fi
 
@@ -411,9 +426,22 @@ runs:
         QR_CODE_CHECK_URL=""
         QR_CODE_INPUT="${QR_CODE:-true}"
         if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]] && [ "$QR_CODE_INPUT" != "false" ]; then
-          QR_CACHE_BUSTER="$(date -u +%s)"
           QR_CODE_CHECK_URL="${PREVIEW_URL}pr-preview-qr.png"
-          QR_CODE_URL="${QR_CODE_CHECK_URL}?v=${QR_CACHE_BUSTER}"
+
+          if [ "${GITHUB_SERVER_URL:-${{ github.server_url }}}" = "https://github.com" ]; then
+            QR_CACHE_BUSTER="$(date -u +%s)"
+            QR_CODE_URL="${QR_CODE_CHECK_URL}?v=${QR_CACHE_BUSTER}"
+          else
+            CURRENT_REPO="${{ github.repository }}"
+            QR_IMAGE_REPO="${TARGET_REPO:-$CURRENT_REPO}"
+
+            if [ "$QR_IMAGE_REPO" = "$CURRENT_REPO" ]; then
+              QR_CODE_URL="../blob/${TARGET_BRANCH}/${PREVIEW_TARGET_FOLDER}/pr-preview-qr.png?raw=true"
+            else
+              QR_CODE_URL="../../../${QR_IMAGE_REPO}/blob/${TARGET_BRANCH}/${PREVIEW_TARGET_FOLDER}/pr-preview-qr.png?raw=true"
+            fi
+          fi
+
           QR_CODE_SUFFIX="<p><img src=\"${QR_CODE_URL}\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
         fi
 
