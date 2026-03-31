@@ -474,15 +474,7 @@ runs:
           if curl -fsSL "$CHECK_URL" -o "$TMP_FILE"; then
             if [ -s "$TMP_FILE" ]; then
               if [ "$CHECK_KIND" = "qr" ]; then
-                if python - "$TMP_FILE" <<'PY'
-                  import sys
-                  from pathlib import Path
-
-                  path = Path(sys.argv[1])
-                  signature = path.read_bytes()[:8]
-                  sys.exit(0 if signature == b"\x89PNG\r\n\x1a\n" else 1)
-                  PY
-                then
+                if python -c 'import sys; data=open(sys.argv[1],"rb").read(8); sys.exit(0 if data==b"\x89PNG\r\n\x1a\n" else 1)' "$TMP_FILE"; then
                   echo "Preview QR asset is reachable and valid."
                   exit 0
                 fi
