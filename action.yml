@@ -484,7 +484,8 @@ runs:
         set -euo pipefail
 
         TMP_FILE="$(mktemp)"
-        trap 'rm -f "$TMP_FILE"' EXIT
+        HEADER_FILE="$(mktemp)"
+        trap 'rm -f "$TMP_FILE" "$HEADER_FILE"' EXIT
 
         FINAL_QR_CODE_SUFFIX="$DEFAULT_QR_CODE_SUFFIX"
 
@@ -530,15 +531,25 @@ runs:
 
           QR_READY="false"
           QR_INTERVAL="${QR_POLL_INTERVAL_SECONDS}"
+          QR_DEBUG_PRINTED="false"
 
           for i in $(seq 1 "${QR_POLL_ATTEMPTS}"); do
-            HTTP_CODE="$(curl -sSL -o "$TMP_FILE" -w '%{http_code}' "$CHECK_QR_URL" || true)"
+            : > "$HEADER_FILE"
+            HTTP_CODE="$(curl --compressed -sSL -D "$HEADER_FILE" -o "$TMP_FILE" -w '%{http_code}' "$CHECK_QR_URL" || true)"
 
             if [ "$HTTP_CODE" = "200" ] && [ -s "$TMP_FILE" ]; then
-              if python -c 'import sys; data=open(sys.argv[1],"rb").read(8); sys.exit(0 if data==b"\x89PNG\r\n\x1a\n" else 1)' "$TMP_FILE"; then
+              if python -c 'import gzip, sys; data=open(sys.argv[1],"rb").read(); png=b"\x89PNG\r\n\x1a\n"; ok=data.startswith(png); ok = ok or (data.startswith(b"\x1f\x8b") and (lambda d: d.startswith(png))(gzip.decompress(data))); sys.exit(0 if ok else 1)' "$TMP_FILE"; then
                 echo "QR asset is reachable and valid."
                 QR_READY="true"
                 break
+              fi
+
+              if [ "$QR_DEBUG_PRINTED" != "true" ]; then
+                echo "QR asset returned HTTP 200 but did not match PNG validation."
+                echo "Response headers:"
+                sed -n '1,20p' "$HEADER_FILE" || true
+                python -c 'import binascii, sys; data=open(sys.argv[1],"rb").read(32); print("First 32 bytes (hex):", binascii.hexlify(data).decode())' "$TMP_FILE"
+                QR_DEBUG_PRINTED="true"
               fi
 
               echo "QR asset responded with 200 but is not a valid PNG yet (attempt $i/${QR_POLL_ATTEMPTS})."
