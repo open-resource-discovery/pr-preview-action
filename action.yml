@@ -113,6 +113,7 @@ runs:
         QR_CODE_INPUT="${{ inputs.qr-code }}"
         QR_CODE_SUFFIX=""
         QR_CODE_URL=""
+        QR_CODE_CHECK_URL=""
         COMMENT_HEADER="${{ inputs.comment-header }}"
         PREVIEW_TARGET_FOLDER=""
         PREVIEW_URL=""
@@ -180,10 +181,12 @@ runs:
 
         QR_CODE_SUFFIX=""
         QR_CODE_URL=""
+        QR_CODE_CHECK_URL=""
         QR_CODE_INPUT="${QR_CODE_INPUT:-true}"
         if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]] && [ "$QR_CODE_INPUT" != "false" ]; then
           QR_CACHE_BUSTER="$(date -u +%s)"
-          QR_CODE_URL="${PREVIEW_URL}pr-preview-qr.png?v=${QR_CACHE_BUSTER}"
+          QR_CODE_CHECK_URL="${PREVIEW_URL}pr-preview-qr.png"
+          QR_CODE_URL="${QR_CODE_CHECK_URL}?v=${QR_CACHE_BUSTER}"
           QR_CODE_SUFFIX="<p><img src=\"${QR_CODE_URL}\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
         fi
 
@@ -232,6 +235,7 @@ runs:
           echo "preview_url=$PREVIEW_URL"
           echo "qr_code_suffix=$QR_CODE_SUFFIX"
           echo "qr_code_url=$QR_CODE_URL"
+          echo "qr_code_check_url=$QR_CODE_CHECK_URL"
           echo "comment_header=$COMMENT_HEADER"
           echo "comment_title=$COMMENT_TITLE"
           echo "comment_footer=$COMMENT_FOOTER"
@@ -414,10 +418,12 @@ runs:
 
         QR_CODE_SUFFIX=""
         QR_CODE_URL=""
+        QR_CODE_CHECK_URL=""
         QR_CODE_INPUT="${QR_CODE:-true}"
         if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]] && [ "$QR_CODE_INPUT" != "false" ]; then
           QR_CACHE_BUSTER="$(date -u +%s)"
-          QR_CODE_URL="${PREVIEW_URL}pr-preview-qr.png?v=${QR_CACHE_BUSTER}"
+          QR_CODE_CHECK_URL="${PREVIEW_URL}pr-preview-qr.png"
+          QR_CODE_URL="${QR_CODE_CHECK_URL}?v=${QR_CACHE_BUSTER}"
           QR_CODE_SUFFIX="<p><img src=\"${QR_CODE_URL}\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
         fi
 
@@ -431,6 +437,7 @@ runs:
           echo "comment_header=${COMMENT_HEADER:-pr-preview}"
           echo "qr_code_suffix=$QR_CODE_SUFFIX"
           echo "qr_code_url=$QR_CODE_URL"
+          echo "qr_code_check_url=$QR_CODE_CHECK_URL"
           echo "umbrella_dir=${UMBRELLA_DIR:-}"
           echo "comment_title=${COMMENT_TITLE:-PR Preview}"
           echo "comment_footer=${COMMENT_FOOTER:-}"
@@ -464,6 +471,7 @@ runs:
       env:
         PREVIEW_URL: ${{ steps.setup.outputs.preview_url != '' && steps.setup.outputs.preview_url || steps.worker.outputs.preview_url }}
         QR_CODE_URL: ${{ steps.setup.outputs.qr_code_url != '' && steps.setup.outputs.qr_code_url || steps.worker.outputs.qr_code_url }}
+        QR_CODE_CHECK_URL: ${{ steps.setup.outputs.qr_code_check_url != '' && steps.setup.outputs.qr_code_check_url || steps.worker.outputs.qr_code_check_url }}
         QR_CODE_ENABLED: ${{ inputs.qr-code }}
         DEFAULT_QR_CODE_SUFFIX: ${{ steps.worker.outputs.qr_code_suffix != '' && steps.worker.outputs.qr_code_suffix || steps.setup.outputs.qr_code_suffix }}
         INITIAL_DELAY_SECONDS: ${{ inputs.wait-initial-delay-seconds }}
@@ -514,7 +522,8 @@ runs:
         fi
 
         if [ "${QR_CODE_ENABLED:-false}" != "false" ] && [[ "${QR_CODE_URL:-}" =~ ^https?:// ]]; then
-          echo "Checking QR asset (best effort): $QR_CODE_URL"
+          CHECK_QR_URL="${QR_CODE_CHECK_URL:-$QR_CODE_URL}"
+          echo "Checking QR asset (best effort): $CHECK_QR_URL"
           echo "QR initial delay: ${QR_INITIAL_DELAY_SECONDS}s"
 
           sleep "${QR_INITIAL_DELAY_SECONDS}"
@@ -523,7 +532,7 @@ runs:
           QR_INTERVAL="${QR_POLL_INTERVAL_SECONDS}"
 
           for i in $(seq 1 "${QR_POLL_ATTEMPTS}"); do
-            HTTP_CODE="$(curl -sSL -o "$TMP_FILE" -w '%{http_code}' "$QR_CODE_URL" || true)"
+            HTTP_CODE="$(curl -sSL -o "$TMP_FILE" -w '%{http_code}' "$CHECK_QR_URL" || true)"
 
             if [ "$HTTP_CODE" = "200" ] && [ -s "$TMP_FILE" ]; then
               if python -c 'import sys; data=open(sys.argv[1],"rb").read(8); sys.exit(0 if data==b"\x89PNG\r\n\x1a\n" else 1)' "$TMP_FILE"; then
