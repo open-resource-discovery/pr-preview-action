@@ -7,6 +7,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [unreleased]
 
+## [[0.0.1](https://github.com/open-resource-discovery/pr-preview-action/releases/tag/v0.0.1)] - 2026-04-30
+
 ### Added
 
 - Added internal QR code generation for PR preview links using vendored `segno`.
@@ -24,3 +26,5 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - Removed third-party QR provider usage to prevent preview URL leakage.
 - Reduced MITM, tracking, and external service dependency risks for QR generation.
+
+
