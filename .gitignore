@@ -19,3 +19,15 @@ tmp/
 # Build
 dist/
 build/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+.coverage
+.coverage.*
+htmlcov/

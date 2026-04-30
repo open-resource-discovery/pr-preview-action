@@ -33,9 +33,9 @@ inputs:
     default: ""
 
   qr-code:
-    description: 'Include a QR code in the PR comment. Set to "false" to disable, or provide a custom QR provider URL prefix ending with "url=".'
+    description: 'Include an internally generated QR code in the PR comment. Set to "false" to disable.'
     required: false
-    default: "false"
+    default: "true"
 
   comment-header:
     description: "Header used to identify the sticky PR comment."
@@ -56,6 +56,26 @@ inputs:
     description: "Top-level directory inside the target repo to namespace previews."
     required: false
     default: ""
+
+  wait-poll-attempts:
+    description: "Maximum number of reachability check attempts."
+    required: false
+    default: "36"
+
+  wait-poll-interval-seconds:
+    description: "Seconds to wait between reachability check attempts."
+    required: false
+    default: "5"
+
+  qr-wait-poll-attempts:
+    description: "Maximum number of QR asset validation attempts."
+    required: false
+    default: "12"
+
+  qr-wait-poll-interval-seconds:
+    description: "Seconds to wait between QR asset validation attempts."
+    required: false
+    default: "10"
 
 runs:
   using: "composite"
@@ -82,6 +102,8 @@ runs:
         PAGES_BASE_URL="${{ inputs.pages-base-url }}"
         QR_CODE_INPUT="${{ inputs.qr-code }}"
         QR_CODE_SUFFIX=""
+        QR_CODE_URL=""
+        QR_CODE_CHECK_URL=""
         COMMENT_HEADER="${{ inputs.comment-header }}"
         PREVIEW_TARGET_FOLDER=""
         PREVIEW_URL=""
@@ -148,12 +170,29 @@ runs:
         fi
 
         QR_CODE_SUFFIX=""
-        if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]]; then
-          QR_CODE_INPUT="${QR_CODE_INPUT:-false}"
-          if [ "$QR_CODE_INPUT" != "false" ] && [ "$QR_CODE_INPUT" != "true" ] && [ -n "$QR_CODE_INPUT" ]; then
-            ENCODED_URL="$(python -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$PREVIEW_URL")"
-            QR_CODE_SUFFIX="<p><img src=\"${QR_CODE_INPUT}${ENCODED_URL}\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
+        QR_CODE_URL=""
+        QR_CODE_CHECK_URL=""
+        QR_CODE_INPUT="${QR_CODE_INPUT:-true}"
+        if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]] && [ "$QR_CODE_INPUT" != "false" ]; then
+          QR_CODE_CHECK_URL="${PREVIEW_URL}pr-preview-qr.png"
+
+          if [ "$SERVER_URL" = "https://github.com" ]; then
+            QR_CACHE_BUSTER="$(date -u +%s)"
+            QR_CODE_URL="${QR_CODE_CHECK_URL}?v=${QR_CACHE_BUSTER}"
+          else
+            QR_IMAGE_REPO="$TARGET_REPO"
+            if [ -z "$QR_IMAGE_REPO" ]; then
+              QR_IMAGE_REPO="$REPO_NAME"
+            fi
+
+            if [ "$QR_IMAGE_REPO" = "$REPO_NAME" ]; then
+              QR_CODE_URL="../blob/${TARGET_BRANCH}/${PREVIEW_TARGET_FOLDER}/pr-preview-qr.png?raw=true"
+            else
+              QR_CODE_URL="../../../${QR_IMAGE_REPO}/blob/${TARGET_BRANCH}/${PREVIEW_TARGET_FOLDER}/pr-preview-qr.png?raw=true"
+            fi
           fi
+
+          QR_CODE_SUFFIX="<p><img src=\"${QR_CODE_URL}\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
         fi
 
         # Decide action
@@ -200,6 +239,8 @@ runs:
           echo "preview_target_folder=$PREVIEW_TARGET_FOLDER"
           echo "preview_url=$PREVIEW_URL"
           echo "qr_code_suffix=$QR_CODE_SUFFIX"
+          echo "qr_code_url=$QR_CODE_URL"
+          echo "qr_code_check_url=$QR_CODE_CHECK_URL"
           echo "comment_header=$COMMENT_HEADER"
           echo "comment_title=$COMMENT_TITLE"
           echo "comment_footer=$COMMENT_FOOTER"
@@ -216,6 +257,7 @@ runs:
         echo "deployment_action=${{ steps.setup.outputs.deployment_action }}"
         echo "target_repo=${{ steps.setup.outputs.target_repo }}"
         echo "preview_url=${{ steps.setup.outputs.preview_url }}"
+        echo "qr_code_url=${{ steps.setup.outputs.qr_code_url }}"
 
     - name: Prepare + upload artifact (fork PR -> worker instructions)
       if: steps.setup.outputs.deployment_action == 'upload'
@@ -236,6 +278,15 @@ runs:
         # Copy build output when available (open/sync) - closed typically has no build
         if [ "$WORKER_ACTION" = "deploy" ] && [ -d "${{ steps.setup.outputs.build_dir }}" ]; then
           cp -R "${{ steps.setup.outputs.build_dir }}/." __pr_preview_payload/
+        fi
+
+        if [ "$WORKER_ACTION" = "deploy" ] \
+          && [ "${{ inputs.qr-code }}" != "false" ] \
+          && [ -n "${{ steps.setup.outputs.preview_url }}" ] \
+          && [[ "${{ steps.setup.outputs.preview_url }}" =~ ^https?:// ]]; then
+          python "${{ github.action_path }}/.internal-tools/generate_qr_svg.py" \
+            "${{ steps.setup.outputs.preview_url }}" \
+            "__pr_preview_payload/pr-preview-qr.png"
         fi
 
         # Write meta for workflow_run
@@ -371,12 +422,27 @@ runs:
         fi
 
         QR_CODE_SUFFIX=""
-        QR_CODE_INPUT="${QR_CODE:-false}"
-        if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]]; then
-          if [ "$QR_CODE_INPUT" != "false" ] && [ "$QR_CODE_INPUT" != "true" ] && [ -n "$QR_CODE_INPUT" ]; then
-            ENCODED_URL="$(python -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$PREVIEW_URL")"
-            QR_CODE_SUFFIX="<p><img src=\"${QR_CODE_INPUT}${ENCODED_URL}\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
+        QR_CODE_URL=""
+        QR_CODE_CHECK_URL=""
+        QR_CODE_INPUT="${QR_CODE:-true}"
+        if [ -n "$PREVIEW_URL" ] && [[ "$PREVIEW_URL" =~ ^https?:// ]] && [ "$QR_CODE_INPUT" != "false" ]; then
+          QR_CODE_CHECK_URL="${PREVIEW_URL}pr-preview-qr.png"
+
+          if [ "${GITHUB_SERVER_URL:-${{ github.server_url }}}" = "https://github.com" ]; then
+            QR_CACHE_BUSTER="$(date -u +%s)"
+            QR_CODE_URL="${QR_CODE_CHECK_URL}?v=${QR_CACHE_BUSTER}"
+          else
+            CURRENT_REPO="${{ github.repository }}"
+            QR_IMAGE_REPO="${TARGET_REPO:-$CURRENT_REPO}"
+
+            if [ "$QR_IMAGE_REPO" = "$CURRENT_REPO" ]; then
+              QR_CODE_URL="../blob/${TARGET_BRANCH}/${PREVIEW_TARGET_FOLDER}/pr-preview-qr.png?raw=true"
+            else
+              QR_CODE_URL="../../../${QR_IMAGE_REPO}/blob/${TARGET_BRANCH}/${PREVIEW_TARGET_FOLDER}/pr-preview-qr.png?raw=true"
+            fi
           fi
+
+          QR_CODE_SUFFIX="<p><img src=\"${QR_CODE_URL}\" height=\"100\" align=\"right\" alt=\"QR code for preview link\" /></p>"
         fi
 
         {
@@ -388,10 +454,22 @@ runs:
           echo "preview_url=$PREVIEW_URL"
           echo "comment_header=${COMMENT_HEADER:-pr-preview}"
           echo "qr_code_suffix=$QR_CODE_SUFFIX"
+          echo "qr_code_url=$QR_CODE_URL"
+          echo "qr_code_check_url=$QR_CODE_CHECK_URL"
           echo "umbrella_dir=${UMBRELLA_DIR:-}"
           echo "comment_title=${COMMENT_TITLE:-PR Preview}"
           echo "comment_footer=${COMMENT_FOOTER:-}"
         } >> "$GITHUB_OUTPUT"
+
+    - name: Generate QR code asset (deploy)
+      if: steps.setup.outputs.deployment_action == 'deploy' && inputs.qr-code != 'false' && startsWith(steps.setup.outputs.preview_url, 'http')
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        python "${{ github.action_path }}/.internal-tools/generate_qr_svg.py" \
+          "${{ steps.setup.outputs.preview_url }}" \
+          "${{ steps.setup.outputs.build_dir }}/pr-preview-qr.png"
 
     - name: Deploy preview
       if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
@@ -403,6 +481,136 @@ runs:
         folder: ${{ steps.setup.outputs.build_dir != '' && steps.setup.outputs.deployment_action == 'deploy' && steps.setup.outputs.build_dir || 'preview' }}
         target-folder: ${{ steps.setup.outputs.preview_target_folder != '' && steps.setup.outputs.preview_target_folder || steps.worker.outputs.preview_target_folder }}
         clean: false
+
+    - name: Wait for preview URL
+      if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
+      uses: actions/github-script@v8
+      env:
+        PREVIEW_URL: ${{ steps.setup.outputs.preview_url != '' && steps.setup.outputs.preview_url || steps.worker.outputs.preview_url }}
+        POLL_ATTEMPTS: ${{ inputs.wait-poll-attempts }}
+        POLL_INTERVAL_SECONDS: ${{ inputs.wait-poll-interval-seconds }}
+      with:
+        script: |
+          const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+          const previewUrl = process.env.PREVIEW_URL || "";
+          const attempts = Number(process.env.POLL_ATTEMPTS || "36");
+          const intervalMs = Number(process.env.POLL_INTERVAL_SECONDS || "5") * 1000;
+
+          if (!/^https?:\/\//.test(previewUrl)) {
+            core.info("Preview URL is not absolute. Skipping preview wait.");
+            return;
+          }
+
+          let ready = false;
+
+          for (let i = 1; i <= attempts; i++) {
+            try {
+              const response = await fetch(previewUrl, { redirect: "follow" });
+              const body = await response.text();
+
+              if (response.ok && body.length > 0) {
+                core.info(`Preview is reachable (attempt ${i}/${attempts}).`);
+                ready = true;
+                break;
+              }
+
+              core.info(`Preview returned status ${response.status} (attempt ${i}/${attempts}).`);
+            } catch (error) {
+              core.info(`Preview check failed (attempt ${i}/${attempts}): ${error.message}`);
+            }
+
+            if (i < attempts) {
+              core.info(`Waiting ${intervalMs / 1000}s before next preview retry...`);
+              await sleep(intervalMs);
+            }
+          }
+
+          if (!ready) {
+            core.setFailed(`Timed out waiting for preview: ${previewUrl}`);
+          }
+
+    - name: Wait for QR asset (public GitHub only)
+      id: qr_health_public
+      if: (steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy') && inputs.qr-code != 'false' && github.server_url == 'https://github.com'
+      continue-on-error: true
+      uses: actions/github-script@v8
+      env:
+        QR_CODE_CHECK_URL: ${{ steps.setup.outputs.qr_code_check_url != '' && steps.setup.outputs.qr_code_check_url || steps.worker.outputs.qr_code_check_url }}
+        QR_POLL_ATTEMPTS: ${{ inputs.qr-wait-poll-attempts }}
+        QR_POLL_INTERVAL_SECONDS: ${{ inputs.qr-wait-poll-interval-seconds }}
+      with:
+        script: |
+          const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+          const qrUrl = process.env.QR_CODE_CHECK_URL || "";
+          const attempts = Number(process.env.QR_POLL_ATTEMPTS || "12");
+          const intervalMs = Number(process.env.QR_POLL_INTERVAL_SECONDS || "10") * 1000;
+          const pngMagic = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+
+          if (!/^https?:\/\//.test(qrUrl)) {
+            core.info("QR URL is not absolute. Skipping public QR validation.");
+            return;
+          }
+
+          let ready = false;
+
+          for (let i = 1; i <= attempts; i++) {
+            try {
+              const response = await fetch(qrUrl, { redirect: "follow" });
+              const contentType = (response.headers.get("content-type") || "").toLowerCase();
+              const buffer = Buffer.from(await response.arrayBuffer());
+
+              if (response.ok && buffer.length >= 8 && buffer.subarray(0, 8).equals(pngMagic)) {
+                core.info(`QR asset is reachable and valid (attempt ${i}/${attempts}).`);
+                ready = true;
+                break;
+              }
+
+              core.info(`QR check attempt ${i}/${attempts}: status=${response.status}, content-type=${contentType}`);
+            } catch (error) {
+              core.info(`QR check failed (attempt ${i}/${attempts}): ${error.message}`);
+            }
+
+            if (i < attempts) {
+              core.info(`Waiting ${intervalMs / 1000}s before next QR retry...`);
+              await sleep(intervalMs);
+            }
+          }
+
+          if (!ready) {
+            core.setFailed(`Timed out waiting for public QR asset: ${qrUrl}`);
+          }
+
+    - name: Resolve QR code suffix
+      id: asset_wait
+      if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
+      shell: bash
+      env:
+        DEFAULT_QR_CODE_SUFFIX: ${{ steps.worker.outputs.qr_code_suffix != '' && steps.worker.outputs.qr_code_suffix || steps.setup.outputs.qr_code_suffix }}
+        QR_CODE_ENABLED: ${{ inputs.qr-code }}
+        PUBLIC_QR_CHECK_OUTCOME: ${{ steps.qr_health_public.outcome }}
+        SERVER_URL: ${{ github.server_url }}
+      run: |
+        set -euo pipefail
+
+        FINAL_QR_CODE_SUFFIX="$DEFAULT_QR_CODE_SUFFIX"
+
+        if [ "${QR_CODE_ENABLED:-false}" = "false" ]; then
+          FINAL_QR_CODE_SUFFIX=""
+        elif [ "$SERVER_URL" != "https://github.com" ]; then
+          echo "Skipping runner-side QR validation on non-public GitHub."
+          echo "Keeping QR image in comment because access-controlled Pages may redirect the runner to login."
+        elif [ "${PUBLIC_QR_CHECK_OUTCOME:-success}" != "success" ]; then
+          echo "Public QR health check did not pass. Continuing without QR image in comment."
+          FINAL_QR_CODE_SUFFIX=""
+        fi
+
+        {
+          echo "qr_code_suffix<<EOF"
+          printf '%s\n' "$FINAL_QR_CODE_SUFFIX"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
 
     - name: Compute comment timestamp (UTC)
       id: comment_time
@@ -420,7 +628,7 @@ runs:
         message: |
           | **${{ steps.setup.outputs.comment_title != '' && steps.setup.outputs.comment_title || steps.worker.outputs.comment_title }}** |
           | :---: |
-          | ${{ steps.worker.outputs.qr_code_suffix != '' && steps.worker.outputs.qr_code_suffix || steps.setup.outputs.qr_code_suffix }} 🚀 **View preview at:** <br> ${{ steps.setup.outputs.preview_url != '' && steps.setup.outputs.preview_url || steps.worker.outputs.preview_url }} <br><br> |
+          | ${{ steps.asset_wait.outputs.qr_code_suffix }} 🚀 **View preview at:** <br> ${{ steps.setup.outputs.preview_url != '' && steps.setup.outputs.preview_url || steps.worker.outputs.preview_url }} <br><br> |
           | Built to branch [`${{ steps.setup.outputs.target_branch != '' && steps.setup.outputs.target_branch || steps.worker.outputs.target_branch }}`](${{ github.server_url }}/${{ steps.setup.outputs.target_repo != '' && steps.setup.outputs.target_repo || steps.worker.outputs.target_repo }}/tree/${{ steps.setup.outputs.target_branch != '' && steps.setup.outputs.target_branch || steps.worker.outputs.target_branch }}) at ${{ steps.comment_time.outputs.utc }}. |
           | ${{ steps.setup.outputs.comment_footer != '' && steps.setup.outputs.comment_footer || steps.worker.outputs.comment_footer }} |
         GITHUB_TOKEN: ${{ inputs.token }}
