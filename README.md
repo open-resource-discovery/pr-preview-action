@@ -39,23 +39,23 @@ If you only need same-repo PR previews for GitHub Pages, marketplace actions may
 
 ## Requirements
 
-- Runner needs `bash`, `curl`, `unzip`, `python` available (for worker artifact download).
+- Runner needs `bash`, `curl`, `unzip`, `python` available.
 - Target repo must accept pushes to the configured branch.
 - For GitHub Pages, the target branch/folder must be configured accordingly.
 
 ## Inputs
 
-| Input          | Required | Default      | Description                                                                                                                                                   |
-| -------------- | -------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| fork           | no       | false        | Enable fork support (upload artifact on fork PRs).                                                                                                            |
-| build-dir      | no       | build        | Directory containing built output.                                                                                                                            |
-| token          | no       | GITHUB_TOKEN | Token used for API + deploy/remove (PAT recommended for cross-repo).                                                                                          |
-| target-repo    | no       |              | Repo hosting previews. If empty, deploys to the current repository.                                                                                           |
-| target-branch  | no       | main         | Branch to deploy to.                                                                                                                                          |
-| pages-base-url | no       | ""           | Base URL used in the PR comment link.                                                                                                                         |
-| qr-code        | no       | False        | Adds a QR code to the PR comment only if a custom QR provider URL prefix (ending with `url=`) is explicitly configured. No default external provider is used. |
-| umbrella-dir   | no       | ""           | Top-level directory inside the target repo. If not set, a smart default is chosen (see "Preview folder layout").                                              |
-| comment-\*     | no       | ...          | Sticky PR comment configuration.                                                                                                                              |
+| Input          | Required | Default      | Description                                                                                                      |
+| -------------- | -------- | ------------ | ---------------------------------------------------------------------------------------------------------------- |
+| fork           | no       | false        | Enable fork support (upload artifact on fork PRs).                                                               |
+| build-dir      | no       | build        | Directory containing built output.                                                                               |
+| token          | no       | GITHUB_TOKEN | Token used for API + deploy/remove (PAT recommended for cross-repo).                                             |
+| target-repo    | no       |              | Repo hosting previews. If empty, deploys to the current repository.                                              |
+| target-branch  | no       | main         | Branch to deploy to.                                                                                             |
+| pages-base-url | no       | ""           | Base URL used in the PR comment link.                                                                            |
+| qr-code        | no       | true         | Adds an internally generated QR code to the PR comment. Set to `false` to disable.                               |
+| umbrella-dir   | no       | ""           | Top-level directory inside the target repo. If not set, a smart default is chosen (see "Preview folder layout"). |
+| comment-\*     | no       | ...          | Sticky PR comment configuration.                                                                                 |
 
 ## Preview folder layout (umbrella-dir behavior)
 
@@ -80,11 +80,12 @@ Examples:
 
 ## QR code in PR comment
 
-For security reasons, the action **does not ship a default external QR provider**.
-A QR code is only rendered if you explicitly configure a **custom QR provider URL prefix** (must end with `url=`).
+By default, the action adds an internally generated QR code to the PR comment.
 
-- Disable (default): `qr-code: false`
-- Enable with custom provider: `qr-code: "https://your-provider/?url="`
+The QR code is generated locally during the workflow and deployed together with the preview output. No external QR provider is used, so preview URLs are not sent to third-party services.
+
+- Enabled by default: `qr-code: true`
+- Disable: `qr-code: false`
 
 ## Example: two-workflow setup (fork-safe)
 
