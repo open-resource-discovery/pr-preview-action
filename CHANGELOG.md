@@ -26,5 +26,3 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - Removed third-party QR provider usage to prevent preview URL leakage.
 - Reduced MITM, tracking, and external service dependency risks for QR generation.
-
-
