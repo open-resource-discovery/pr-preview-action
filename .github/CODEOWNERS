@@ -1,10 +1,10 @@
 # Review owners for CI and build configuration.
-/.github/ @Fannon
-/renovate.json @Fannon
-/package.json @Fannon
-/package-lock.json @Fannon
-/action.yml @Fannon
-/.internal-actions/upload-artifact-v3-node20/action.yml @Fannon
-/.internal-actions/upload-artifact-v4/action.yml @Fannon
-/.internal-actions/ @Fannon
-/.internal-tools/ @Fannon
+/.github/ @pavelkornev @nirooxx 
+/renovate.json @pavelkornev @nirooxx 
+/package.json @pavelkornev @nirooxx 
+/package-lock.json @pavelkornev @nirooxx 
+/action.yml @pavelkornev @nirooxx 
+/.internal-actions/upload-artifact-v3-node20/action.yml @pavelkornev @nirooxx 
+/.internal-actions/upload-artifact-v4/action.yml @pavelkornev @nirooxx 
+/.internal-actions/ @pavelkornev @nirooxx 
+/.internal-tools/ @pavelkornev @nirooxx 
