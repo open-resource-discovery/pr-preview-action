@@ -23,7 +23,10 @@ On `pull_request` from forks:
 
 - Build runs without secrets, uploads an artifact (static output + meta)
   On `workflow_run`:
-- Worker downloads the artifact and deploys/removes using a token with write permissions.
+- The worker verifies the originating run against the current GitHub pull request. A matching open PR can publish static files. A matching closed PR can remove its preview. Stale or ambiguous runs are skipped.
+- Set the preview repository, branch, umbrella directory and Pages base URL in the trusted worker workflow. Use the same values in the PR build workflow. Existing cross-repository deployments must copy any custom settings into the worker when upgrading. The worker rejects an artifact that names a different destination. Configure custom comment text and QR settings on the worker as well.
+- The example serializes worker runs for the same fork and head branch. Static fork artifacts support up to 10,000 entries, 256 MiB compressed, 512 MiB extracted and 128 MiB per file.
+- The worker token needs pull request access on the source for lookup and comments, Actions read on the source for artifact download, and Contents write on the preview target. The worker checkout uses the job token with Contents read.
 
 > Note: Secrets (except GITHUB_TOKEN) are not available to workflows triggered from forks. This is why the worker pattern exists.
 
@@ -39,7 +42,7 @@ If you only need same-repo PR previews for GitHub Pages, marketplace actions may
 
 ## Requirements
 
-- Runner needs `bash`, `curl`, `unzip`, `python` available.
+- Runner needs `bash`, `curl` and `python` available.
 - Target repo must accept pushes to the configured branch.
 - For GitHub Pages, the target branch/folder must be configured accordingly.
 
@@ -63,7 +66,7 @@ The `umbrella-dir` input has a default value of `""`, but the action applies a *
 
 ### Rules
 
-- If `umbrella-dir` is explicitly set: that value is used.
+- Each directory component in `umbrella-dir` may contain ASCII letters, digits, dots, underscores and hyphens. Use slashes to separate components. The special components `.`, `..` and `.git` are reserved. Choose a destination with no symbolic links in its path.
 - Else, if `target-repo` is empty or equals the current repository: `umbrella-dir` defaults to `pr-preview`.
 - Else (deploying to a different target repo): `umbrella-dir` defaults to the sanitized source repo name (`<repo>` from `owner/repo`).
 
@@ -94,7 +97,7 @@ See `examples/`.
 ## Security
 
 - Do NOT use self-hosted runners for public repos when running untrusted PR code.
-- Treat artifacts from fork PR workflows as untrusted input and only deploy static build outputs.
+- Serve fork previews as static files on an isolated origin without application credentials. Fork HTML and JavaScript run in the viewer’s browser. Configure branch-based Pages to serve raw static files, for example with `.nojekyll` at the publishing root.
 
 ## Support, Feedback, Contributing
 
