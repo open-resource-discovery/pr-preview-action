@@ -8,8 +8,12 @@ on:
         required: false
         type: string
 
+permissions:
+  contents: read
+
 jobs:
   create-release:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -19,12 +23,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          persist-credentials: true # Needed to push the changelog branch
 
-          persist-credentials: true # Needed by the release/push step
       - name: Set up Node for the changelog formatter
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: 26
+          node-version: "26.13.1"
           package-manager-cache: false
 
       - name: Prepare automated changelog commits
@@ -38,6 +42,3 @@ jobs:
           ci-workflows: "none"
           tag-template: "v<version>"
           version: ${{ inputs.version }}
-    if: github.ref == 'refs/heads/main'
-permissions:
-  contents: read
