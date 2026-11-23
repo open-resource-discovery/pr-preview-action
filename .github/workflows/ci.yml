@@ -22,14 +22,33 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
           cache: npm
 
       - name: Install Node dependencies
         run: npm ci
 
-      - name: Prettier (check)
-        run: npm run prettier:ci
+      - name: Check tooling on current Node
+        run: |
+          npm run prettier:ci
+          npm run lint:staged -- --version
+
+      - name: Read minimum supported Node version
+        id: node-minimum
+        run: |
+          node -p '"version=" + require("./package.json").engines.node.match(/^>=(\d+\.\d+\.\d+)$/)[1]' >> "$GITHUB_OUTPUT"
+
+      - name: Setup minimum supported Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ steps.node-minimum.outputs.version }}
+          cache: npm
+
+      - name: Check tooling on minimum supported Node
+        run: |
+          npm ci
+          npm run prettier:ci
+          npm run lint:staged -- --version
 
       - name: Setup Python
         uses: actions/setup-python@v7
