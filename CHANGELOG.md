@@ -9,7 +9,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
-- Repository development tooling requires Node.js 26.13.1 or later. CI and the release workflow use Node.js 26.13.1.
+- Repository development tooling requires Node.js 26 or later. CI and the release workflow select Node.js 26.
 - The preview URL check now makes up to 180 attempts by default to accommodate delayed GitHub Pages publication. The default pause between attempts remains five seconds.
 
 ### Fixed
