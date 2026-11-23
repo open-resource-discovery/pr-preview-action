@@ -28,25 +28,8 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
-      - name: Check tooling on current Node
+      - name: Check Node tooling
         run: |
-          npm run prettier:ci
-          npm run lint:staged -- --version
-
-      - name: Read minimum supported Node version
-        id: node-minimum
-        run: |
-          node -p '"version=" + require("./package.json").engines.node.match(/^>=(\d+\.\d+\.\d+)$/)[1]' >> "$GITHUB_OUTPUT"
-
-      - name: Setup minimum supported Node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ steps.node-minimum.outputs.version }}
-          cache: npm
-
-      - name: Check tooling on minimum supported Node
-        run: |
-          npm ci
           npm run prettier:ci
           npm run lint:staged -- --version
 

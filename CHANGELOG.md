@@ -11,7 +11,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - When upgrading fork previews, copy any custom `target-repo`, `target-branch`, `umbrella-dir` and `pages-base-url` values from the PR build into the trusted `workflow_run` worker. The destinations must match. Set custom QR and PR comment options on the worker as well.
 - Fork artifact uploads use `actions/upload-artifact@v7` on GitHub.com and `@v3-node20` on GitHub Enterprise Server. The worker and cleanup steps use `actions/checkout@v7`, which requires Actions Runner 2.327.1 or later.
-- Renovate now tracks dependency updates. Repository development tooling requires Node.js 22.22.1 or later. CI tests it on 22.22.1 and 26.
+- Renovate now tracks dependency updates. Repository development tooling and CI use Node.js 26.13.1 or later.
 
 ### Fixed
 
