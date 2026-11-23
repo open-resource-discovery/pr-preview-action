@@ -60,7 +60,7 @@ inputs:
   wait-poll-attempts:
     description: "Maximum number of reachability check attempts."
     required: false
-    default: "36"
+    default: "180"
 
   wait-poll-interval-seconds:
     description: "Seconds to wait between reachability check attempts."
