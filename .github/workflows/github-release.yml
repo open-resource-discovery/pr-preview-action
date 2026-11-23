@@ -28,7 +28,7 @@ jobs:
       - name: Set up Node for the changelog formatter
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: "26.13.1"
+          node-version: "26"
           package-manager-cache: false
 
       - name: Prepare automated changelog commits
