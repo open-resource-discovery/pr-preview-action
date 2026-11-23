@@ -337,7 +337,7 @@ runs:
 
     - name: Checkout (worker)
       if: steps.setup.outputs.deployment_action == 'worker'
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         clean: false
 
@@ -635,7 +635,7 @@ runs:
 
     - name: Checkout target repo (remove)
       if: steps.setup.outputs.deployment_action == 'remove' || steps.worker.outputs.deployment_action == 'remove'
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         repository: ${{ steps.setup.outputs.target_repo != '' && steps.setup.outputs.target_repo || steps.worker.outputs.target_repo }}
         ref: ${{ steps.setup.outputs.target_branch != '' && steps.setup.outputs.target_branch || steps.worker.outputs.target_branch }}
