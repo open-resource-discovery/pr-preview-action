@@ -60,6 +60,8 @@ If you only need same-repo PR previews for GitHub Pages, marketplace actions may
 | umbrella-dir   | no       | ""           | Top-level directory inside the target repo. If not set, a smart default is chosen (see "Preview folder layout"). |
 | comment-\*     | no       | ...          | Sticky PR comment configuration.                                                                                 |
 
+GitHub Pages can take up to 10 minutes to publish a change. By default, the action checks the preview URL up to 180 times (`wait-poll-attempts`) with a five-second pause between attempts (`wait-poll-interval-seconds`). This allows about 15 minutes of pauses for delayed publication. HTTP requests add to the elapsed time. The check ends as soon as the preview responds successfully. [GitHub Pages publishing times](https://docs.github.com/en/pages/getting-started-with-github-pages/creating-a-github-pages-site#viewing-your-published-site).
+
 ## Preview folder layout (umbrella-dir behavior)
 
 The `umbrella-dir` input has a default value of `""`, but the action applies a **runtime default** when it is not provided to avoid collisions.
