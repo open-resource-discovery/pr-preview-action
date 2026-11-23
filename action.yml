@@ -484,7 +484,7 @@ runs:
 
     - name: Wait for preview URL
       if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
-      uses: actions/github-script@v8
+      uses: actions/github-script@v9
       env:
         PREVIEW_URL: ${{ steps.setup.outputs.preview_url != '' && steps.setup.outputs.preview_url || steps.worker.outputs.preview_url }}
         POLL_ATTEMPTS: ${{ inputs.wait-poll-attempts }}
@@ -534,7 +534,7 @@ runs:
       id: qr_health_public
       if: (steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy') && inputs.qr-code != 'false' && github.server_url == 'https://github.com'
       continue-on-error: true
-      uses: actions/github-script@v8
+      uses: actions/github-script@v9
       env:
         QR_CODE_CHECK_URL: ${{ steps.setup.outputs.qr_code_check_url != '' && steps.setup.outputs.qr_code_check_url || steps.worker.outputs.qr_code_check_url }}
         QR_POLL_ATTEMPTS: ${{ inputs.qr-wait-poll-attempts }}
