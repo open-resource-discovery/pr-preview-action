@@ -19,8 +19,8 @@
   "devDependencies": {
     "husky": "9.1.7",
     "is-ci": "4.1.0",
-    "lint-staged": "16.2.7",
-    "prettier": "3.7.4"
+    "lint-staged": "16.4.0",
+    "prettier": "3.10.1"
   },
   "lint-staged": {
     "**/*.{json,yml,yaml,md}": [
