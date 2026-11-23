@@ -67,5 +67,3 @@ jobs:
         uses: fsfe/reuse-action@676e2d560c9a403aa252096d99fcab3e1132b0f5 # v6
       - name: Python unit tests
         run: python -m unittest discover -s tests -v
-    permissions:
-      contents: read
