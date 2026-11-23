@@ -1,4 +1,4 @@
-﻿name: "PR Preview"
+name: "PR Preview"
 description: "PR preview helper for PRs and forks."
 author: "open-resource-discovery"
 
@@ -211,7 +211,7 @@ runs:
 
     - name: Checkout (worker)
       if: steps.setup.outputs.deployment_action == 'worker'
-      uses: actions/checkout@v7
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       with:
         persist-credentials: false
 
@@ -256,7 +256,7 @@ runs:
 
     - name: Deploy preview
       if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
-      uses: JamesIves/github-pages-deploy-action@v4
+      uses: JamesIves/github-pages-deploy-action@fa24774553152dd7873cd16ebd8d959b010c5445 # v4
       with:
         token: ${{ inputs.token || github.token }}
         repository-name: ${{ steps.setup.outputs.target_repo }}
@@ -339,7 +339,7 @@ runs:
 
     - name: Update sticky PR comment (deploy)
       if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
-      uses: marocchino/sticky-pull-request-comment@v3.0.5
+      uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
       with:
         header: ${{ inputs.comment-header }}
         number: ${{ steps.setup.outputs.pr_number }}
@@ -353,13 +353,14 @@ runs:
 
     - name: Checkout target repo (remove)
       if: steps.setup.outputs.deployment_action == 'remove' || steps.worker.outputs.deployment_action == 'remove'
-      uses: actions/checkout@v7
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7; zizmor: ignore[artipacked] -- Remove-only path needs credentials for the later git push; it never uploads artifacts.
       with:
         repository: ${{ steps.setup.outputs.target_repo }}
         ref: ${{ inputs.target-branch }}
         token: ${{ inputs.token || github.token }}
         fetch-depth: 0
 
+        persist-credentials: true
     - name: Remove preview directory (remove)
       if: steps.setup.outputs.deployment_action == 'remove' || steps.worker.outputs.deployment_action == 'remove'
       shell: bash
@@ -379,7 +380,7 @@ runs:
 
     - name: Update sticky PR comment (remove)
       if: steps.setup.outputs.deployment_action == 'remove' || steps.worker.outputs.deployment_action == 'remove'
-      uses: marocchino/sticky-pull-request-comment@v3.0.5
+      uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
       with:
         header: ${{ inputs.comment-header }}
         number: ${{ steps.setup.outputs.pr_number }}
