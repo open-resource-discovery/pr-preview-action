@@ -11,6 +11,9 @@ on:
 jobs:
   create-release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -18,7 +21,8 @@ jobs:
           fetch-depth: 0
 
       - name: Create GitHub Release
-        uses: open-resource-discovery/github-release@02020c108b46638889308e063694c94258369eb2 # main
+        uses: open-resource-discovery/github-release@2d8817b7382966b490d5c78125d97da14ee918bc # main
         with:
+          ci-workflows: "none"
           tag-template: "v<version>"
           version: ${{ inputs.version }}
