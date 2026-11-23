@@ -21,6 +21,17 @@ jobs:
           fetch-depth: 0
 
           persist-credentials: true # Needed by the release/push step
+      - name: Set up Node for the changelog formatter
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 26
+          package-manager-cache: false
+
+      - name: Prepare automated changelog commits
+        run: |
+          npm ci --ignore-scripts
+          sh .internal-tools/prepare-changelog-commit.sh
+
       - name: Create GitHub Release
         uses: open-resource-discovery/github-release@2d8817b7382966b490d5c78125d97da14ee918bc # main
         with:

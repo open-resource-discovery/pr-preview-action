@@ -7,6 +7,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [unreleased]
 
+## [[0.1.0](https://github.com/open-resource-discovery/pr-preview-action/releases/tag/v0.1.0)] - 2026-11-23
+
 ### Changed
 
 - When upgrading fork previews, copy any custom `target-repo`, `target-branch`, `umbrella-dir` and `pages-base-url` values from the PR build into the trusted `workflow_run` worker. The destinations must match. Set custom QR and PR comment options on the worker as well.
