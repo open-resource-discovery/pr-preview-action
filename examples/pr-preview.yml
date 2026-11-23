@@ -19,7 +19,7 @@ jobs:
         if: github.event.action != 'closed'
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 26 # Use the version your preview build requires.
 
       - name: Build preview
         if: github.event.action != 'closed'
