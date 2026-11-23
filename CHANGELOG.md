@@ -7,13 +7,26 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [unreleased]
 
+### Changed
+
+- Repository development tooling requires Node.js 26.13.1 or later. CI and the release workflow use Node.js 26.13.1.
+- The preview URL check now makes up to 180 attempts by default to accommodate delayed GitHub Pages publication. The default pause between attempts remains five seconds.
+
+### Fixed
+
+- Concurrent preview deployments rebase before retrying a push to the same target branch, with up to ten rebase attempts.
+
+### Security
+
+- Preview deployments and artifact uploads use actions pinned to commit SHAs. Repository workflows default to read-only contents access, and releases run from `main`.
+
 ## [[0.1.0](https://github.com/open-resource-discovery/pr-preview-action/releases/tag/v0.1.0)] - 2026-11-23
 
 ### Changed
 
 - When upgrading fork previews, copy any custom `target-repo`, `target-branch`, `umbrella-dir` and `pages-base-url` values from the PR build into the trusted `workflow_run` worker. The destinations must match. Set custom QR and PR comment options on the worker as well.
 - Fork artifact uploads use `actions/upload-artifact@v7` on GitHub.com and `@v3-node20` on GitHub Enterprise Server. The worker and cleanup steps use `actions/checkout@v7`, which requires Actions Runner 2.327.1 or later.
-- Renovate now tracks dependency updates. Repository development tooling and CI use Node.js 26.13.1 or later.
+- Renovate now tracks dependency updates. Repository development tooling requires Node.js 22.22.1 or later. CI tests it on 22.22.1 and 26.
 
 ### Fixed
 
