@@ -17,10 +17,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -32,9 +32,9 @@ jobs:
         run: npm run prettier:ci
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
-          python-version: "3.11"
+          python-version: "3.15"
 
       - name: Install yamllint
         run: python -m pip install --upgrade pip yamllint
@@ -43,7 +43,7 @@ jobs:
         run: yamllint -c .yamllint.yml -f parsable .
 
       - name: actionlint
-        uses: devops-actions/actionlint@v0.1.10
+        uses: devops-actions/actionlint@v1.0.0
 
       - name: REUSE lint
         uses: fsfe/reuse-action@v6

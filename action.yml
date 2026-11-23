@@ -337,7 +337,7 @@ runs:
 
     - name: Checkout (worker)
       if: steps.setup.outputs.deployment_action == 'worker'
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         clean: false
 
@@ -621,7 +621,7 @@ runs:
 
     - name: Update sticky PR comment (deploy)
       if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
-      uses: marocchino/sticky-pull-request-comment@v2
+      uses: marocchino/sticky-pull-request-comment@v3.0.5
       with:
         header: ${{ steps.setup.outputs.comment_header != '' && steps.setup.outputs.comment_header || steps.worker.outputs.comment_header }}
         number: ${{ steps.setup.outputs.pr_number != '' && steps.setup.outputs.pr_number || steps.worker.outputs.pr_number }}
@@ -635,7 +635,7 @@ runs:
 
     - name: Checkout target repo (remove)
       if: steps.setup.outputs.deployment_action == 'remove' || steps.worker.outputs.deployment_action == 'remove'
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         repository: ${{ steps.setup.outputs.target_repo != '' && steps.setup.outputs.target_repo || steps.worker.outputs.target_repo }}
         ref: ${{ steps.setup.outputs.target_branch != '' && steps.setup.outputs.target_branch || steps.worker.outputs.target_branch }}
@@ -672,7 +672,7 @@ runs:
 
     - name: Update sticky PR comment (remove)
       if: steps.setup.outputs.deployment_action == 'remove' || steps.worker.outputs.deployment_action == 'remove'
-      uses: marocchino/sticky-pull-request-comment@v2
+      uses: marocchino/sticky-pull-request-comment@v3.0.5
       with:
         header: ${{ steps.setup.outputs.comment_header != '' && steps.setup.outputs.comment_header || steps.worker.outputs.comment_header }}
         number: ${{ steps.setup.outputs.pr_number != '' && steps.setup.outputs.pr_number || steps.worker.outputs.pr_number }}
