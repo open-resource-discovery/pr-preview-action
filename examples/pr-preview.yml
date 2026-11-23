@@ -9,11 +9,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      actions: write
-      pull-requests: read
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node
         if: github.event.action != 'closed'

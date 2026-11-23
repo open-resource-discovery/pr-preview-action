@@ -15,10 +15,10 @@ def fetch(url: str) -> tuple[int, str, bytes]:
         url,
         headers={"User-Agent": "pr-preview-action/1.0"},
     )
-    with urllib.request.urlopen(request) as response:
+    with urllib.request.urlopen(request, timeout=10) as response:
         status = getattr(response, "status", response.getcode())
         content_type = response.headers.get("Content-Type", "")
-        body = response.read()
+        body = response.read(len(PNG_MAGIC))
         return status, content_type, body
 
 
@@ -61,10 +61,10 @@ def main() -> int:
                 f"{args.label.capitalize()} check attempt {attempt}/{args.attempts}: "
                 f"status={exc.code}"
             )
-        except urllib.error.URLError as exc:
+        except (urllib.error.URLError, TimeoutError) as exc:
             print(
                 f"{args.label.capitalize()} check attempt {attempt}/{args.attempts}: "
-                f"{exc.reason}"
+                f"{exc}"
             )
 
         if attempt < args.attempts:

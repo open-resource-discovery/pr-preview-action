@@ -8,6 +8,9 @@ on:
 jobs:
   pr-preview-fork-deploy:
     runs-on: ubuntu-latest
+    concurrency:
+      group: pr-preview-worker-${{ github.event.workflow_run.head_repository.id }}-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
     permissions:
       contents: read
       actions: read
@@ -16,4 +19,6 @@ jobs:
       - name: PR preview (worker)
         uses: <org>/pr-preview-action@v1
         with:
+          target-repo: <org>/<preview-repo>
+          pages-base-url: https://<org>.github.io/<preview-repo>
           token: ${{ secrets.PR_PREVIEW_TOKEN }}
