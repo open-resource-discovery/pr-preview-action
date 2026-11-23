@@ -264,6 +264,9 @@ runs:
         folder: ${{ steps.worker.outputs.folder || inputs.build-dir }}
         target-folder: ${{ steps.setup.outputs.preview_target_folder }}
         clean: false
+        # Preserve previews published concurrently by other repositories.
+        force: false
+        attempt-limit: 10
 
     - name: Wait for preview URL
       if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
