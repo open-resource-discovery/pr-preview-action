@@ -1,10 +1,10 @@
 name: "PR Preview"
-description: "PR preview helper for PRs and forks."
+description: "PR preview helper for same-repository pull requests."
 author: "open-resource-discovery"
 
 inputs:
   fork:
-    description: 'Set to "true" to enable forks support.'
+    description: "Deprecated compatibility input. Its value is ignored; previews are limited to same-repository pull requests."
     required: false
     default: "false"
 
@@ -80,22 +80,13 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Verify originating fork pull request
-      id: origin
-      if: github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.id != github.event.repository.id
-      shell: bash
-      env:
-        GITHUB_TOKEN: ${{ inputs.token || github.token }}
-      run: python "$GITHUB_ACTION_PATH/.internal-tools/verify_fork.py"
-
     - name: Setup environment
       id: setup
       shell: bash
       env:
-        HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
-        PR_NUMBER: ${{ steps.origin.outputs.pr_number || github.event.pull_request.number }}
+        HEAD_REPOSITORY_ID: ${{ github.event.pull_request.head.repo.id }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
         PR_ACTION: ${{ github.event.action }}
-        ALLOW_FORK: ${{ inputs.fork }}
         TARGET_REPO: ${{ inputs.target-repo || github.repository }}
         TARGET_BRANCH: ${{ inputs.target-branch }}
         UMBRELLA_DIR: ${{ inputs.umbrella-dir }}
@@ -103,20 +94,16 @@ runs:
         QR_ENABLED: ${{ inputs.qr-code }}
       run: |
         set -euo pipefail
-        action=skip
-        case "$GITHUB_EVENT_NAME" in
-          pull_request)
-            if [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ]; then
-              if [ "$PR_ACTION" = closed ]; then action=remove; else action=deploy; fi
-            elif [ "$ALLOW_FORK" = true ]; then
-              action=upload
-            fi ;;
-          workflow_run)
-            if [ -n "$PR_NUMBER" ]; then action=worker; fi ;;
-          *) echo "Unsupported event: $GITHUB_EVENT_NAME" >&2; exit 1 ;;
-        esac
+        if [[ "$GITHUB_EVENT_NAME" != pull_request ||
+              ! "${HEAD_REPOSITORY_ID:-}" =~ ^[1-9][0-9]*$ ||
+              "$HEAD_REPOSITORY_ID" != "${GITHUB_REPOSITORY_ID:-}" ]]; then
+          echo "deployment_action=skip" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        action=deploy
+        if [ "$PR_ACTION" = closed ]; then action=remove; fi
         echo "deployment_action=$action" >> "$GITHUB_OUTPUT"
-        if [ "$action" = skip ]; then exit 0; fi
 
         if ! [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
           echo "Invalid pull request number" >&2; exit 1
@@ -143,7 +130,6 @@ runs:
         {
           echo "pr_number=$PR_NUMBER"
           echo "target_repo=$TARGET_REPO"
-          echo "umbrella_dir=$UMBRELLA_DIR"
           echo "preview_target_folder=$folder"
           echo "preview_url=$url"
           python "$GITHUB_ACTION_PATH/.internal-tools/resolve_qr_comment.py" \
@@ -152,116 +138,22 @@ runs:
             --preview-target-folder "$folder" --preview-url "$url" --qr-enabled "$QR_ENABLED"
         } >> "$GITHUB_OUTPUT"
 
-    - name: Prepare fork artifact
-      if: steps.setup.outputs.deployment_action == 'upload'
-      shell: bash
-      env:
-        PR_ACTION: ${{ github.event.action }}
-        PR_NUMBER: ${{ steps.setup.outputs.pr_number }}
-        BUILD_DIR: ${{ inputs.build-dir }}
-        TARGET_REPO: ${{ steps.setup.outputs.target_repo }}
-        TARGET_BRANCH: ${{ inputs.target-branch }}
-        UMBRELLA_DIR: ${{ steps.setup.outputs.umbrella_dir }}
-        PAGES_BASE_URL: ${{ inputs.pages-base-url }}
-      run: |
-        set -euo pipefail
-        rm -rf __pr_preview_payload
-        mkdir __pr_preview_payload
-        if [ "$PR_ACTION" != closed ]; then
-          cp -R -- "$BUILD_DIR/." __pr_preview_payload/
-        fi
-        python - <<'PYTHON'
-        import json
-        import os
-        from pathlib import Path
-
-        metadata = {key.lower(): os.environ[key] for key in (
-            "PR_NUMBER", "TARGET_REPO", "TARGET_BRANCH", "UMBRELLA_DIR", "PAGES_BASE_URL"
-        )}
-        metadata["worker_action"] = "remove" if os.environ["PR_ACTION"] == "closed" else "deploy"
-        Path("__pr_preview_payload/pr-preview-meta.json").write_text(json.dumps(metadata), encoding="utf-8")
-        PYTHON
-
-    - name: Prepare artifact upload helper actions
-      if: steps.setup.outputs.deployment_action == 'upload'
-      shell: bash
-      run: |
-        set -euo pipefail
-
-        HELPER_ROOT="$GITHUB_WORKSPACE/.pr-preview-action-helpers"
-        rm -rf "$HELPER_ROOT"
-        mkdir -p "$HELPER_ROOT"
-
-        cp -R "$GITHUB_ACTION_PATH/.internal-actions/upload-artifact-v4" "$HELPER_ROOT/"
-        cp -R "$GITHUB_ACTION_PATH/.internal-actions/upload-artifact-v3-node20" "$HELPER_ROOT/"
-
-    - name: Upload artifact (v4)
-      if: steps.setup.outputs.deployment_action == 'upload' && github.server_url == 'https://github.com'
-      uses: ./.pr-preview-action-helpers/upload-artifact-v4
-      with:
-        name: pr-preview
-        path: __pr_preview_payload
-
-    - name: Upload artifact (v3-node20)
-      if: steps.setup.outputs.deployment_action == 'upload' && github.server_url != 'https://github.com'
-      uses: ./.pr-preview-action-helpers/upload-artifact-v3-node20
-      with:
-        name: pr-preview
-        path: __pr_preview_payload
-
-    - name: Checkout (worker)
-      if: steps.setup.outputs.deployment_action == 'worker'
-      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      with:
-        persist-credentials: false
-
-    - name: Download and validate the fork artifact
-      id: worker
-      if: steps.setup.outputs.deployment_action == 'worker'
-      shell: bash
-      env:
-        GITHUB_TOKEN: ${{ inputs.token || github.token }}
-        RUN_ID: ${{ github.event.workflow_run.id }}
-        PR_NUMBER: ${{ steps.origin.outputs.pr_number }}
-        OPERATION: ${{ steps.origin.outputs.operation }}
-        TARGET_REPO: ${{ steps.setup.outputs.target_repo }}
-        TARGET_BRANCH: ${{ inputs.target-branch }}
-        UMBRELLA_DIR: ${{ steps.setup.outputs.umbrella_dir }}
-        PAGES_BASE_URL: ${{ inputs.pages-base-url }}
-      run: |
-        set -euo pipefail
-        api="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions"
-        headers=(-H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json")
-        artifact_id="$(curl -fsSL "${headers[@]}" "$api/runs/$RUN_ID/artifacts?name=pr-preview&per_page=100" |
-          python -c 'import json, sys
-        ids = [a["id"] for a in json.load(sys.stdin)["artifacts"] if a["name"] == "pr-preview" and not a["expired"]]
-        if len(ids) != 1 or type(ids[0]) is not int or ids[0] < 1:
-            sys.exit("Expected exactly one live pr-preview artifact in the originating run")
-        print(ids[0])')"
-        archive="$(mktemp "$RUNNER_TEMP/pr-preview.XXXXXXXX")"
-        trap 'rm -f -- "$archive"' EXIT
-        curl -fsSL --max-filesize 268435456 "${headers[@]}" -o "$archive" "$api/artifacts/$artifact_id/zip"
-        # The deploy action accepts paths relative to GITHUB_WORKSPACE.
-        folder="$(mktemp -d "$GITHUB_WORKSPACE/.pr-preview-static.XXXXXXXX")"
-        python "$GITHUB_ACTION_PATH/.internal-tools/unpack_preview.py" "$archive" "$folder"
-        echo "folder=${folder##*/}" >> "$GITHUB_OUTPUT"
-
     - name: Generate QR code asset (deploy)
-      if: (steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy') && inputs.qr-code != 'false' && startsWith(steps.setup.outputs.preview_url, 'http')
+      if: steps.setup.outputs.deployment_action == 'deploy' && inputs.qr-code != 'false' && startsWith(steps.setup.outputs.preview_url, 'http')
       shell: bash
       env:
         PREVIEW_URL: ${{ steps.setup.outputs.preview_url }}
-        BUILD_DIR: ${{ steps.worker.outputs.folder || inputs.build-dir }}
+        BUILD_DIR: ${{ inputs.build-dir }}
       run: python "$GITHUB_ACTION_PATH/.internal-tools/generate_qr_svg.py" "$PREVIEW_URL" "$BUILD_DIR/pr-preview-qr.png"
 
     - name: Deploy preview
-      if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
+      if: steps.setup.outputs.deployment_action == 'deploy'
       uses: JamesIves/github-pages-deploy-action@fa24774553152dd7873cd16ebd8d959b010c5445 # v4
       with:
         token: ${{ inputs.token || github.token }}
         repository-name: ${{ steps.setup.outputs.target_repo }}
         branch: ${{ inputs.target-branch }}
-        folder: ${{ steps.worker.outputs.folder || inputs.build-dir }}
+        folder: ${{ inputs.build-dir }}
         target-folder: ${{ steps.setup.outputs.preview_target_folder }}
         clean: false
         # Preserve previews published concurrently by other repositories.
@@ -269,7 +161,7 @@ runs:
         attempt-limit: 10
 
     - name: Wait for preview URL
-      if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
+      if: steps.setup.outputs.deployment_action == 'deploy'
       shell: bash
       env:
         URL: ${{ steps.setup.outputs.preview_url }}
@@ -286,7 +178,7 @@ runs:
 
     - name: Wait for QR asset (public GitHub only)
       id: qr_health_public
-      if: (steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy') && inputs.qr-code != 'false' && github.server_url == 'https://github.com'
+      if: steps.setup.outputs.deployment_action == 'deploy' && inputs.qr-code != 'false' && github.server_url == 'https://github.com'
       continue-on-error: true
       shell: bash
       env:
@@ -305,7 +197,7 @@ runs:
 
     - name: Resolve QR code suffix
       id: asset_wait
-      if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
+      if: steps.setup.outputs.deployment_action == 'deploy'
       shell: bash
       env:
         DEFAULT_QR_CODE_SUFFIX: ${{ steps.setup.outputs.qr_code_suffix }}
@@ -335,13 +227,13 @@ runs:
 
     - name: Compute comment timestamp (UTC)
       id: comment_time
-      if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
+      if: steps.setup.outputs.deployment_action == 'deploy'
       shell: bash
       run: |
         echo "utc=$(date -u '+%Y-%m-%d %H:%M UTC')" >> "$GITHUB_OUTPUT"
 
     - name: Update sticky PR comment (deploy)
-      if: steps.setup.outputs.deployment_action == 'deploy' || steps.worker.outputs.deployment_action == 'deploy'
+      if: steps.setup.outputs.deployment_action == 'deploy'
       uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
       with:
         header: ${{ inputs.comment-header }}
@@ -355,8 +247,8 @@ runs:
         GITHUB_TOKEN: ${{ inputs.token || github.token }}
 
     - name: Checkout target repo (remove)
-      if: steps.setup.outputs.deployment_action == 'remove' || steps.worker.outputs.deployment_action == 'remove'
-      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7; zizmor: ignore[artipacked] -- Remove-only path needs credentials for the later git push; it never uploads artifacts.
+      if: steps.setup.outputs.deployment_action == 'remove'
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7; zizmor: ignore[artipacked] -- Remove-only path needs credentials for the later git push.
       with:
         repository: ${{ steps.setup.outputs.target_repo }}
         ref: ${{ inputs.target-branch }}
@@ -365,7 +257,7 @@ runs:
 
         persist-credentials: true
     - name: Remove preview directory (remove)
-      if: steps.setup.outputs.deployment_action == 'remove' || steps.worker.outputs.deployment_action == 'remove'
+      if: steps.setup.outputs.deployment_action == 'remove'
       shell: bash
       env:
         PREVIEW_DIR: ${{ steps.setup.outputs.preview_target_folder }}
@@ -382,7 +274,7 @@ runs:
         fi
 
     - name: Update sticky PR comment (remove)
-      if: steps.setup.outputs.deployment_action == 'remove' || steps.worker.outputs.deployment_action == 'remove'
+      if: steps.setup.outputs.deployment_action == 'remove'
       uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
       with:
         header: ${{ inputs.comment-header }}
