@@ -265,13 +265,40 @@ runs:
         PR_NUMBER: ${{ steps.setup.outputs.pr_number }}
       run: |
         set -euo pipefail
-        git rm -rf --ignore-unmatch -- "$PREVIEW_DIR"
-        if ! git diff --cached --quiet -- "$PREVIEW_DIR"; then
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+        target_ref="refs/heads/$TARGET_BRANCH"
+        max_attempts=5
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git fetch --no-tags origin "$target_ref"
+
+        for ((attempt = 1; attempt <= max_attempts; attempt++)); do
+          # Reapply the removal on the newest checkout so other previews stay intact.
+          git reset --hard FETCH_HEAD
+          starting_commit=$(git rev-parse HEAD)
+          git rm -rf --ignore-unmatch -- "$PREVIEW_DIR"
+          if git diff --cached --quiet -- "$PREVIEW_DIR"; then
+            exit 0
+          fi
           git commit -m "chore: remove pr-preview ($PREVIEW_DIR) for PR #$PR_NUMBER on $TARGET_BRANCH"
-          git push origin "$TARGET_BRANCH"
+          if git push origin "HEAD:$target_ref"; then
+            exit 0
+          fi
+
+          git fetch --no-tags origin "$target_ref"
+          latest_commit=$(git rev-parse FETCH_HEAD)
+          if [[ "$latest_commit" == "$starting_commit" ]]; then
+            echo "Preview cleanup push failed without a concurrent target branch update" >&2
+            exit 1
+          fi
+        done
+
+        remaining=$(git ls-tree --name-only FETCH_HEAD -- "$PREVIEW_DIR")
+        if [[ -z "$remaining" ]]; then
+          exit 0
         fi
+        echo "Preview cleanup could not be pushed after $max_attempts attempts" >&2
+        exit 1
 
     - name: Update sticky PR comment (remove)
       if: steps.setup.outputs.deployment_action == 'remove'
