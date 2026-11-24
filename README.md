@@ -113,5 +113,6 @@ Follow the instructions in SECURITY.md.
 
 ## Licensing
 
-Copyright (...)
-See LICENSE.
+Copyright SAP SE or an SAP affiliated Company and Open Resource Discovery contributors.
+
+This project is licensed under [Apache-2.0](./LICENSE). Licensing metadata follows [REUSE](https://reuse.software/) and is recorded in [REUSE.toml](./REUSE.toml).
