@@ -62,7 +62,7 @@ jobs:
         run: yamllint -c .yamllint.yml -f parsable .
 
       - name: actionlint
-        uses: devops-actions/actionlint@v1.0.0
+        uses: devops-actions/actionlint@v1.0.1
 
       - name: REUSE lint
         uses: fsfe/reuse-action@v6
