@@ -26,5 +26,14 @@
     "**/*.{json,yml,yaml,md}": [
       "prettier --write"
     ]
-  }
+  },
+  "packageManager": "npm@11.20.0",
+  "devEngines": {
+    "packageManager": {
+      "name": "npm",
+      "version": ">=11.20.0",
+      "onFail": "error"
+    }
+  },
+  "allowScripts": {}
 }
