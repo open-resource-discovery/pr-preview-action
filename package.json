@@ -14,7 +14,8 @@
     "lint:staged": "lint-staged",
     "prettier": "prettier --write \"**/*.{json,yml,yaml,md}\"",
     "prettier:ci": "prettier --check \"**/*.{json,yml,yaml,md}\"",
-    "prepare": "is-ci || husky"
+    "prepare": "is-ci || husky",
+    "setup:hooks": "is-ci || husky"
   },
   "devDependencies": {
     "husky": "9.1.7",
