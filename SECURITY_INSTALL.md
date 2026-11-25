@@ -5,9 +5,11 @@ CI bootstraps npm 11.20.0 before npm commands.
 Published consumer engine requirements are unchanged.
 
 Install from the committed lockfiles with npm ci.
-Project configuration applies a two-day minimum release age and rejects dependency lifecycle scripts that have no explicit decision.
-Version-specific allowScripts entries deny automatic scripts unless an existing reviewed approval is retained.
-Repository pre/post build and generation commands remain enabled.
+npm applies the two-day minimum release age when it resolves versions, including lockfile updates.
+When npm ci reuses a valid lockfile, it does not independently recheck release age.
+With `ignore-scripts=true`, npm skips dependency lifecycle scripts and the check for missing `allowScripts` decisions.
+Commands invoked explicitly with `npm run` still run, with their automatic pre- and post-scripts skipped.
+Run `npm run setup:hooks` after `npm ci` to configure local Husky hooks.
 Review a dependency script and its registry identity/integrity before changing its entry to true.
 Avoid scope-wide age exceptions, and use a documented package/version exception only for an urgent reviewed security fix.
 
