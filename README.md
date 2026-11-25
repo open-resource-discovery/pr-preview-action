@@ -2,43 +2,18 @@
 
 ## About this project
 
-This repository provides a Composite GitHub Action to deploy PR previews (including fork PRs) to a target repository (e.g. GitHub Pages branch/folder).
-It supports:
-
-- Direct deploy/remove for local PRs
-- Fork-safe flow via artifact upload (PR workflow) + deploy/remove (workflow_run worker)
+This repository provides a composite GitHub Action to deploy previews for same-repository pull requests. It can publish to GitHub Pages in the source repository or a separate preview repository.
 
 ## How it works
 
-### Local PRs
-
-On `pull_request`:
+On `pull_request` from the same repository:
 
 - opened/reopened/synchronize -> deploy
 - closed -> remove (deletes the preview directory from the target branch)
 
-### Fork PRs
+The action skips fork pull requests and events other than `pull_request`.
 
-On `pull_request` from forks:
-
-- Build runs without secrets, uploads an artifact (static output + meta)
-  On `workflow_run`:
-- The worker verifies the originating run against the current GitHub pull request. A matching open PR can publish static files. A matching closed PR can remove its preview. Stale or ambiguous runs are skipped.
-- Set the preview repository, branch, umbrella directory and Pages base URL in the trusted worker workflow. Use the same values in the PR build workflow. Existing cross-repository deployments must copy any custom settings into the worker when upgrading. The worker rejects an artifact that names a different destination. Configure custom comment text and QR settings on the worker as well.
-- The example serializes worker runs for the same fork and head branch. Static fork artifacts support up to 10,000 entries, 256 MiB compressed, 512 MiB extracted and 128 MiB per file.
-- The worker token needs pull request access on the source for lookup and comments, Actions read on the source for artifact download, and Contents write on the preview target. The worker checkout uses the job token with Contents read.
-
-> Note: Secrets (except GITHUB_TOKEN) are not available to workflows triggered from forks. This is why the worker pattern exists.
-
-## Why not use existing PR preview actions?
-
-We reviewed existing marketplace options (e.g. `rossjrw/pr-preview-action`). The main differences are:
-
-- **Fork support:** many preview actions focus on same-repo PRs, fork PRs are often not supported out of the box.
-- **Security model:** our default approach keeps secrets out of the untrusted fork PR run by using an artifact + `workflow_run` worker pattern.
-- **Cross-repo deploy clarity:** we explicitly support deploying to a separate target repo/branch and document the required PAT + `persist-credentials: false` checkout setting.
-
-If you only need same-repo PR previews for GitHub Pages, marketplace actions may be enough. If you need reliable fork-safe previews and cross-repo deploy/cleanup, this action provides a consistent pattern.
+When upgrading a fork-enabled setup, delete the `pr-preview-worker.yml` workflow and use the same-repository job guard from the example below. Remove the `fork` input from the caller. The action ignores this legacy input so existing callers continue to load without an unknown-input warning.
 
 ## Requirements
 
@@ -50,7 +25,6 @@ If you only need same-repo PR previews for GitHub Pages, marketplace actions may
 
 | Input          | Required | Default      | Description                                                                                                      |
 | -------------- | -------- | ------------ | ---------------------------------------------------------------------------------------------------------------- |
-| fork           | no       | false        | Enable fork support (upload artifact on fork PRs).                                                               |
 | build-dir      | no       | build        | Directory containing built output.                                                                               |
 | token          | no       | GITHUB_TOKEN | Token used for API + deploy/remove (PAT recommended for cross-repo).                                             |
 | target-repo    | no       |              | Repo hosting previews. If empty, deploys to the current repository.                                              |
@@ -59,6 +33,8 @@ If you only need same-repo PR previews for GitHub Pages, marketplace actions may
 | qr-code        | no       | true         | Adds an internally generated QR code to the PR comment. Set to `false` to disable.                               |
 | umbrella-dir   | no       | ""           | Top-level directory inside the target repo. If not set, a smart default is chosen (see "Preview folder layout"). |
 | comment-\*     | no       | ...          | Sticky PR comment configuration.                                                                                 |
+
+GitHub Pages can take up to 10 minutes to publish a change. By default, the action checks the preview URL up to 180 times (`wait-poll-attempts`) with a five-second pause between attempts (`wait-poll-interval-seconds`). This allows about 15 minutes of pauses for delayed publication. HTTP requests add to the elapsed time. The check ends as soon as the preview responds successfully. [GitHub Pages publishing times](https://docs.github.com/en/pages/getting-started-with-github-pages/creating-a-github-pages-site#viewing-your-published-site).
 
 ## Preview folder layout (umbrella-dir behavior)
 
@@ -90,14 +66,14 @@ The QR code is generated locally during the workflow and deployed together with 
 - Enabled by default: `qr-code: true`
 - Disable: `qr-code: false`
 
-## Example: two-workflow setup (fork-safe)
+## Example workflow
 
-See `examples/`.
+Copy [the example workflow](./examples/pr-preview.yml) and replace `REPLACE_WITH_RELEASE_COMMIT_SHA` with the full commit SHA of the action release you are using. For a separate preview repository, configure the target repository, Pages URL, and `PR_PREVIEW_TOKEN` secret. The token needs permission to write to the preview branch and update the pull request comment in the source repository.
 
 ## Security
 
-- Do NOT use self-hosted runners for public repos when running untrusted PR code.
-- Serve fork previews as static files on an isolated origin without application credentials. Fork HTML and JavaScript run in the viewer’s browser. Configure branch-based Pages to serve raw static files, for example with `.nojekyll` at the publishing root.
+- Keep the same-repository guard at the job level so it runs before checkout, build, and access to preview credentials.
+- Use GitHub-hosted runners for workflow jobs that run untrusted PR code in public repositories.
 
 ## Support, Feedback, Contributing
 

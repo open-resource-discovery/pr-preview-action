@@ -46,5 +46,5 @@ Please follow SAP’s disclosure guidelines for security advisories (linked from
 This repository contains a GitHub Action used in CI/CD contexts.
 
 - **Do not** include secrets, tokens, or sensitive data in issues, logs, or example workflows.
-- Treat artifacts produced by fork PR workflows as **untrusted input** and avoid executing or evaluating untrusted content in privileged workflows.
+- Keep preview jobs restricted to same-repository pull requests.
 - If you suspect a vulnerability related to token usage, fork handling, or deployment behavior, report it via the channels above.

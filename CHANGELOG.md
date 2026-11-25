@@ -7,6 +7,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [unreleased]
 
+### Changed
+
+- Repository development tooling requires Node.js 26 or later. CI and the release workflow select Node.js 26.
+- The preview URL check now makes up to 180 attempts by default to accommodate delayed GitHub Pages publication. The default pause between attempts remains five seconds.
+
+### Fixed
+
+- Concurrent preview deployments rebase before retrying a push to the same target branch, with up to ten rebase attempts.
+
+### Removed
+
+- Removed fork pull request previews, including the worker workflow, artifact transfer and validation. The legacy `fork` input is ignored.
+
+### Security
+
+- Preview deployments use actions pinned to commit SHAs. Repository workflows default to read-only contents access, and releases run from `main`.
+
 ## [[0.1.0](https://github.com/open-resource-discovery/pr-preview-action/releases/tag/v0.1.0)] - 2026-11-23
 
 ### Changed

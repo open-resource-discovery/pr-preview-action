@@ -6,20 +6,21 @@ on:
 
 jobs:
   pr-preview:
+    if: github.event.pull_request.head.repo.id != null && github.event.pull_request.head.repo.id == github.event.repository.id
     runs-on: ubuntu-latest
     permissions:
       contents: read
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
       - name: Setup Node
         if: github.event.action != 'closed'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: 26 # Use the version your preview build requires.
 
       - name: Build preview
         if: github.event.action != 'closed'
@@ -30,9 +31,8 @@ jobs:
           npm run build
 
       - name: PR preview
-        uses: <org>/pr-preview-action@v1
+        uses: open-resource-discovery/pr-preview-action@REPLACE_WITH_RELEASE_COMMIT_SHA
         with:
-          fork: true
           target-repo: <org>/<preview-repo>
           pages-base-url: https://<org>.github.io/<preview-repo>
           token: ${{ secrets.PR_PREVIEW_TOKEN }}
