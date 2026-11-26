@@ -45,7 +45,7 @@ jobs:
         run: yamllint -c .yamllint.yml -f parsable .
 
       - name: actionlint
-        uses: devops-actions/actionlint@216abcda9203ffeaeb953db1b151c94e1927c5bf # v1.0.0
+        uses: devops-actions/actionlint@1127887bc5b38beddaafc906b5f293430ef6d255 # v2.0.1
       - name: REUSE lint
         uses: fsfe/reuse-action@676e2d560c9a403aa252096d99fcab3e1132b0f5 # v6
       - name: Python unit tests
