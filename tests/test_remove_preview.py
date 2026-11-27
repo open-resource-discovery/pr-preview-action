@@ -69,7 +69,8 @@ class TestRemovePreview(unittest.TestCase):
         interleave = textwrap.dedent(r'''
             git() {
               if [[ "$1" == push ]] && read -r commit < "$CONCURRENT_UPDATES"; then
-                sed -i '1d' "$CONCURRENT_UPDATES" || exit 2
+                sed '1d' "$CONCURRENT_UPDATES" > "$CONCURRENT_UPDATES.next" || exit 2
+                mv "$CONCURRENT_UPDATES.next" "$CONCURRENT_UPDATES" || exit 2
                 command git -C "$CONCURRENT_CHECKOUT" push origin "$commit:refs/heads/$TARGET_BRANCH" || exit 2
               fi
               command git "$@"

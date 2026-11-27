@@ -15,13 +15,17 @@
     "prettier": "prettier --write \"**/*.{json,yml,yaml,md}\"",
     "prettier:ci": "prettier --check \"**/*.{json,yml,yaml,md}\"",
     "prepare": "is-ci || husky",
-    "setup:hooks": "is-ci || husky"
+    "setup:hooks": "is-ci || husky",
+    "build:worker": "esbuild .internal-tools/trusted-preview.mjs --bundle --platform=node --format=esm --target=node20 --outfile=.internal-tools/trusted-preview.bundle.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "test:worker": "node --test tests/*.test.mjs"
   },
   "devDependencies": {
     "husky": "9.1.7",
     "is-ci": "4.1.0",
     "lint-staged": "17.6.2",
-    "prettier": "3.10.1"
+    "prettier": "3.10.1",
+    "esbuild": "0.28.2",
+    "yazl": "3.3.1"
   },
   "lint-staged": {
     "**/*.{json,yml,yaml,md}": [
@@ -36,5 +40,10 @@
       "onFail": "error"
     }
   },
-  "allowScripts": {}
+  "allowScripts": {
+    "esbuild@0.28.2": false
+  },
+  "dependencies": {
+    "yauzl": "3.4.0"
+  }
 }
