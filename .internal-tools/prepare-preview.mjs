@@ -1,5 +1,15 @@
 #!/usr/bin/env node
-import { cpSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  cpSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
+import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -75,13 +85,22 @@ function hideSearchInPages(directory) {
         throw error;
       }
       const updated = hideDocumentationSearch(html);
-      if (updated !== html) writeFileSync(path, updated);
+      if (updated !== html) {
+        const mode = lstatSync(path).mode;
+        const readOnly = (mode & 0o200) === 0;
+        if (readOnly) chmodSync(path, mode | 0o200);
+        try {
+          writeFileSync(path, updated);
+        } finally {
+          if (readOnly) chmodSync(path, mode);
+        }
+      }
     }
   }
 }
 
 export function preparePreview(source, destination, includeSearchIndexes = false) {
-  source = realpathSync(source);
+  source = realpathSync(source.startsWith("~") ? homedir() + source.slice(1) : source);
   destination = canonicalPath(destination);
   if (!lstatSync(source).isDirectory()) throw new Error("build-dir must be an existing directory");
   if (contains(destination, source)) throw new Error("the deployment copy must not contain build-dir");
@@ -92,7 +111,7 @@ export function preparePreview(source, destination, includeSearchIndexes = false
       const path = join(from, entry.name);
       // Support build-dir='.' without copying staging into itself.
       if (path === destination) continue;
-      if (!includeSearchIndexes && isSearchIndex(entry.name)) {
+      if (!entry.isDirectory() && !includeSearchIndexes && isSearchIndex(entry.name)) {
         excludedCount++;
         continue;
       }

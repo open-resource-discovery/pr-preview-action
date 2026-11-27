@@ -177,6 +177,7 @@ runs:
         target-folder: ${{ steps.setup.outputs.preview_target_folder }}
         # Remove stale files only inside this pull request's target folder.
         clean: true
+        clean-exclude: "**/pr-[0-9]*/***"
         # Preserve previews published concurrently by other repositories.
         force: false
         attempt-limit: 10

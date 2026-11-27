@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -211,6 +212,37 @@ test("CLI rejects invalid arguments before copying", (t) => {
   assert.equal(existsSync(f.destination), false);
 });
 
+test("index-shaped directories and their files are kept", (t) => {
+  const f = fixture(t);
+  f.write("assets/search-index.json/logo.svg", "logo");
+  f.write("search-index.json", "[]");
+  assert.equal(preparePreview(f.source, f.destination), 1);
+  assert.equal(readFileSync(join(f.destination, "assets/search-index.json/logo.svg"), "utf-8"), "logo");
+});
+
+test("read-only documentation is rewritten in the copy with its original mode", (t) => {
+  const f = fixture(t);
+  f.write("search-index.json", "[]");
+  f.write("index.html", DOC_HTML);
+  const original = join(f.source, "index.html");
+  const prepared = join(f.destination, "index.html");
+  chmodSync(original, 0o444);
+  assert.equal(preparePreview(f.source, f.destination), 1);
+  assert.equal(readFileSync(original, "utf-8"), DOC_HTML);
+  assert.equal(readFileSync(prepared, "utf-8"), DOC_HTML.replace("</head><body>", SEARCH_STYLE + "</head><body>"));
+  assert.equal(lstatSync(original).mode & 0o777, 0o444);
+  assert.equal(lstatSync(prepared).mode & 0o777, 0o444);
+});
+
+test("build-dir can be relative to the runner home", (t) => {
+  const f = fixture(t);
+  f.write("index.html", DOC_HTML);
+  run(process.execPath, [HELPER, "~/" + basename(f.source), f.destination, "false"], {
+    env: { ...process.env, HOME: f.root, USERPROFILE: f.root },
+  });
+  assert.equal(readFileSync(join(f.destination, "index.html"), "utf-8"), DOC_HTML);
+});
+
 test("clean deployment removes stale indexes only in the current preview", (t) => {
   if (spawnSync("rsync", ["--version"]).error) return t.skip("rsync is required by the deployment action");
   const f = fixture(t);
@@ -224,8 +256,19 @@ test("clean deployment removes stale indexes only in the current preview", (t) =
     mkdirSync(directory, { recursive: true });
     writeFileSync(join(directory, "search-index.json"), "old-index");
   }
+  const nested = join(current, "guides/archived/pr-2345");
+  mkdirSync(nested, { recursive: true });
+  writeFileSync(join(nested, "search-index.json"), "nested-index");
   const before = neighbors.map((directory) => snapshot(directory));
-  run("rsync", ["-a", "--delete", f.destination + "/.", current]);
-  assert.deepEqual(snapshot(current), snapshot(f.destination));
+  const deploy = readFileSync(join(ROOT, "action.yml"), "utf-8");
+  const filter = deploy.match(/clean-exclude: "([^"]+)"/)?.[1];
+  assert.ok(filter);
+  run("rsync", ["-a", "--delete", "--filter", "P " + filter, f.destination + "/.", current]);
+  assert.equal(readFileSync(join(nested, "search-index.json"), "utf-8"), "nested-index");
+  assert.equal(existsSync(join(current, "search-index.json")), false);
+  assert.equal(
+    readFileSync(join(current, "index.html"), "utf-8"),
+    readFileSync(join(f.destination, "index.html"), "utf-8"),
+  );
   neighbors.forEach((directory, i) => assert.deepEqual(snapshot(directory), before[i]));
 });
