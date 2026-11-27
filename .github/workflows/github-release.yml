@@ -37,7 +37,7 @@ jobs:
           sh .internal-tools/prepare-changelog-commit.sh
 
       - name: Create GitHub Release
-        uses: open-resource-discovery/github-release@5f7b17d84004804cb3d7ba38f283965643107870 # main
+        uses: open-resource-discovery/github-release@46ecd4368ec205fdb422ee7d777d4db8642e8566 # main
         with:
           ci-workflows: "none"
           tag-template: "v<version>"
