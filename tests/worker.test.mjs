@@ -64,8 +64,10 @@ test("stages only verified JSON from the current scheduled run in a fresh direct
       STATIC_ARTIFACT_NAME: "data",
       EXPECTED_BASE_BRANCH: "main",
       EXPECTED_ARTIFACT_FILES: '["data.json"]',
+      INCLUDE_SEARCH_INDEXES: "TRUE",
       RUNNER_TEMP: tempRoot,
     });
+    assert.equal(config.includeSearchIndexes, true);
     const fetchImpl = async (url, options) => {
       if (options.method && options.method !== "GET") writes++;
       const key = url

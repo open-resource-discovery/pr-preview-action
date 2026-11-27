@@ -229,3 +229,21 @@ test("late stale-head checks prevent any publication mutation", async () => {
   assert.equal(result.skipped, true);
   assert.equal(mutations, 0);
 });
+
+test("accepts GHES v3 raw-size metadata while bounding the compressed stream", async () => {
+  const config = {
+    apiUrl: "https://api.example.test",
+    repository: "ORD/repo",
+    sourceToken: "fixture",
+    limits: { compressedBytes: 10, unpackedBytes: 100 },
+  };
+  const artifact = { id: 4, size_in_bytes: 50, expired: false };
+  assert.equal(
+    (await downloadArchive(config, artifact, async () => new Response(Buffer.from("zip")))).toString(),
+    "zip",
+  );
+  await assert.rejects(
+    downloadArchive(config, artifact, async () => new Response(Buffer.alloc(11))),
+    /compressed limit/,
+  );
+});
