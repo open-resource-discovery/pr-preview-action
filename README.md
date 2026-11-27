@@ -134,3 +134,8 @@ For a scheduled/manual artifact containing a built site, use artifact-format: st
 Use json-path-prefix (for example data/) to require JSON validation of report files while allowing site assets in a separate namespace.
 The filename pattern is trusted caller configuration and must never come from the artifact.
 For preview producers, mode: generate-qr reuses the existing QR generator without any publication or token inputs; pass the complete preview URL as pages-base-url and the static output as build-dir.
+
+The trusted workflow-run worker also honors include-search-indexes and preserves existing nested previews during updates.
+Close cleanup removes the entire closed PR preview.
+
+GHES v3 artifact metadata reports the original file size; the worker checks that value against the unpacked limit and separately bounds the downloaded ZIP stream.

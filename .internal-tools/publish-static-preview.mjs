@@ -165,7 +165,11 @@ export function buildFileChanges({ pr, action, files, state, pathPrefix = "" }) 
   }
   for (const file of state.files.keys()) {
     validatePath(file);
-    if (!desired.has(file)) deletions.push({ path: prefix + file });
+    const nestedPreview = file
+      .split("/")
+      .slice(0, -1)
+      .some((part) => part.startsWith("pr-"));
+    if (!desired.has(file) && (action === "closed" || !nestedPreview)) deletions.push({ path: prefix + file });
   }
   if (!state.hasNojekyll) additions.push({ path: ".nojekyll", contents: "" });
   additions.sort((a, b) => a.path.localeCompare(b.path));

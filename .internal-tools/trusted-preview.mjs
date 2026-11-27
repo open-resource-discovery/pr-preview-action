@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { DEFAULT_LIMITS, readStaticArchive, safeArchivePath } from "./static-archive.mjs";
+import { prepareStaticPreview } from "./preview-content.mjs";
 import { publishFiles } from "./publish-static-preview.mjs";
 
 const REPOSITORY = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
@@ -59,6 +60,7 @@ export function loadWorkerConfig(env = process.env) {
     commentTitle: env.COMMENT_TITLE || "PR Preview",
     commentFooter: env.COMMENT_FOOTER || "",
     qr: env.QR_CODE !== "false",
+    includeSearchIndexes: env.INCLUDE_SEARCH_INDEXES === "true",
     outputFile: env.GITHUB_OUTPUT,
     tempRoot: env.RUNNER_TEMP || os.tmpdir(),
     jsonOnly: mode === "download-verified" && env.ARTIFACT_FORMAT !== "static",
@@ -205,7 +207,7 @@ export async function downloadArchive(config, artifact, fetchImpl = globalThis.f
     artifact.expired ||
     !Number.isSafeInteger(artifact.size_in_bytes) ||
     artifact.size_in_bytes < 0 ||
-    artifact.size_in_bytes > config.limits.compressedBytes
+    artifact.size_in_bytes > Math.max(config.limits.compressedBytes, config.limits.unpackedBytes || 0)
   )
     throw new Error("Invalid or oversized artifact metadata");
   const endpoint = config.apiUrl + "/repos/" + config.repository + "/actions/artifacts/" + artifact.id + "/zip";
@@ -311,7 +313,9 @@ export async function runTrustedWorker(config, { fetchImpl = globalThis.fetch, e
   const client = createSourceClient(config, fetchImpl);
   const producer = await verifyProducer(config, payload, client);
   if (producer.skipped) return { skipped: true };
-  const files = producer.action === "closed" ? new Map() : await readArtifact(config, producer, client, fetchImpl);
+  let files = producer.action === "closed" ? new Map() : await readArtifact(config, producer, client, fetchImpl);
+  if (config.mode === "workflow-run" && producer.action !== "closed")
+    files = prepareStaticPreview(files, config.includeSearchIndexes);
   if (config.mode === "download-verified") {
     const current = await client.get("git/ref/heads/" + encodeURIComponent(config.expectedBranch));
     if (current.object?.sha !== producer.sha)

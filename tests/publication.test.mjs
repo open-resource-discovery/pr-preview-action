@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { publishFiles } from "../.internal-tools/publish-static-preview.mjs";
+import { buildFileChanges, publishFiles } from "../.internal-tools/publish-static-preview.mjs";
 
 const SHA = "a".repeat(40);
 const config = {
@@ -84,4 +84,18 @@ test("cleanup removes only this PR namespace and skips a nonexistent preview", a
   const empty = api();
   assert.equal((await publishFiles({ ...config, action: "closed" }, new Map(), empty)).changed, false);
   assert.equal(empty.commits.length, 0);
+});
+
+test("updates preserve existing nested previews while close cleanup removes the whole PR", () => {
+  const state = {
+    hasNojekyll: true,
+    files: new Map([
+      ["search-index.json", { oid: SHA }],
+      ["guides/pr-2345/index.html", { oid: SHA }],
+    ]),
+  };
+  const update = buildFileChanges({ pr: "2", action: "synchronize", files: new Map(), state });
+  assert.deepEqual(update.deletions, [{ path: "pr-2/search-index.json" }]);
+  const cleanup = buildFileChanges({ pr: "2", action: "closed", files: new Map(), state });
+  assert.equal(cleanup.deletions.length, 2);
 });

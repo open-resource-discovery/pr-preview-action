@@ -1541,6 +1541,74 @@ async function readStaticArchive(buffer, options2 = {}) {
   }
 }
 
+// .internal-tools/preview-content.mjs
+import { createHash as createHash2 } from "node:crypto";
+var SEARCH_STYLE = '<style id="pr-preview-search-disabled">.navbar__search,.navbar-sidebar__search{display:none!important}</style>';
+function hideDocumentationSearch(html) {
+  const tags = /<!--[\s\S]*?(?:-->|$)|<![^>]*>|<\/?[a-z][a-z0-9:-]*\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
+  const rawText = /* @__PURE__ */ new Set(["script", "style", "title", "textarea", "xmp", "iframe", "noembed", "noframes"]);
+  let isDocusaurus = false;
+  let hasSearchStyle = false;
+  for (let token = tags.exec(html); token; token = tags.exec(html)) {
+    const tag = /^<(\/?)([a-z][a-z0-9:-]*)\b/i.exec(token[0]);
+    if (!tag) continue;
+    const closing = Boolean(tag[1]);
+    const name = tag[2].toLowerCase();
+    if (closing && name === "head") {
+      return isDocusaurus && !hasSearchStyle ? html.slice(0, token.index) + SEARCH_STYLE + html.slice(token.index) : html;
+    }
+    if (closing) continue;
+    const attributes = /* @__PURE__ */ new Map();
+    const attributePattern = /\s([^\s/>=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>]+)))?/g;
+    for (const attribute of token[0].slice(tag[0].length).matchAll(attributePattern)) {
+      attributes.set(attribute[1].toLowerCase(), attribute[2] ?? attribute[3] ?? attribute[4] ?? "");
+    }
+    if (name === "meta" && attributes.get("name")?.toLowerCase() === "generator") {
+      isDocusaurus ||= attributes.get("content")?.toLowerCase().startsWith("docusaurus") ?? false;
+    }
+    if (name === "style" && attributes.get("id") === "pr-preview-search-disabled") hasSearchStyle = true;
+    if (rawText.has(name)) {
+      const end = new RegExp("</" + name + "\\s*[^>]*>", "gi");
+      end.lastIndex = tags.lastIndex;
+      if (!end.exec(html)) return html;
+      tags.lastIndex = end.lastIndex;
+    }
+  }
+  return html;
+}
+function isSearchIndex(name) {
+  return /^search-index.*\.json(?:\.(?:gz|br))?$/.test(name);
+}
+function prepareStaticPreview(files, includeSearchIndexes = false) {
+  const desired = new Map(files);
+  let removed = 0;
+  if (!includeSearchIndexes) {
+    for (const name of desired.keys()) {
+      if (isSearchIndex(name.split("/").at(-1))) {
+        desired.delete(name);
+        removed++;
+      }
+    }
+  }
+  if (!removed) return desired;
+  for (const [name, entry] of desired) {
+    if (!name.endsWith(".html")) continue;
+    const content = Buffer.from(entry.contents, "base64");
+    let html;
+    try {
+      html = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(content);
+    } catch {
+      continue;
+    }
+    const updated = hideDocumentationSearch(html);
+    if (updated === html) continue;
+    const buffer = Buffer.from(updated);
+    const oid = createHash2("sha1").update("blob " + buffer.length + String.fromCharCode(0)).update(buffer).digest("hex");
+    desired.set(name, { ...entry, oid, contents: buffer.toString("base64") });
+  }
+  return desired;
+}
+
 // .internal-tools/publish-static-preview.mjs
 var COMMIT_MUTATION = `
   mutation PublishPreview($input: CreateCommitOnBranchInput!) {
@@ -1692,7 +1760,8 @@ function buildFileChanges({ pr, action, files, state, pathPrefix = "" }) {
   }
   for (const file of state.files.keys()) {
     validatePath(file);
-    if (!desired.has(file)) deletions.push({ path: prefix + file });
+    const nestedPreview = file.split("/").slice(0, -1).some((part) => part.startsWith("pr-"));
+    if (!desired.has(file) && (action === "closed" || !nestedPreview)) deletions.push({ path: prefix + file });
   }
   if (!state.hasNojekyll) additions.push({ path: ".nojekyll", contents: "" });
   additions.sort((a, b) => a.path.localeCompare(b.path));
@@ -1799,6 +1868,7 @@ function loadWorkerConfig(env = process.env) {
     commentTitle: env.COMMENT_TITLE || "PR Preview",
     commentFooter: env.COMMENT_FOOTER || "",
     qr: env.QR_CODE !== "false",
+    includeSearchIndexes: env.INCLUDE_SEARCH_INDEXES === "true",
     outputFile: env.GITHUB_OUTPUT,
     tempRoot: env.RUNNER_TEMP || os.tmpdir(),
     jsonOnly: mode === "download-verified" && env.ARTIFACT_FORMAT !== "static",
@@ -1904,7 +1974,7 @@ async function verifyProducer(config, event, client) {
   return { repo, run, pr, sha: expectedHead, action: "synchronize" };
 }
 async function downloadArchive(config, artifact, fetchImpl = globalThis.fetch) {
-  if (!Number.isSafeInteger(artifact.id) || artifact.id <= 0 || artifact.expired || !Number.isSafeInteger(artifact.size_in_bytes) || artifact.size_in_bytes < 0 || artifact.size_in_bytes > config.limits.compressedBytes)
+  if (!Number.isSafeInteger(artifact.id) || artifact.id <= 0 || artifact.expired || !Number.isSafeInteger(artifact.size_in_bytes) || artifact.size_in_bytes < 0 || artifact.size_in_bytes > Math.max(config.limits.compressedBytes, config.limits.unpackedBytes || 0))
     throw new Error("Invalid or oversized artifact metadata");
   const endpoint = config.apiUrl + "/repos/" + config.repository + "/actions/artifacts/" + artifact.id + "/zip";
   let currentUrl = endpoint;
@@ -1991,7 +2061,9 @@ async function runTrustedWorker(config, { fetchImpl = globalThis.fetch, event, l
   const client = createSourceClient(config, fetchImpl);
   const producer = await verifyProducer(config, payload, client);
   if (producer.skipped) return { skipped: true };
-  const files = producer.action === "closed" ? /* @__PURE__ */ new Map() : await readArtifact(config, producer, client, fetchImpl);
+  let files = producer.action === "closed" ? /* @__PURE__ */ new Map() : await readArtifact(config, producer, client, fetchImpl);
+  if (config.mode === "workflow-run" && producer.action !== "closed")
+    files = prepareStaticPreview(files, config.includeSearchIndexes);
   if (config.mode === "download-verified") {
     const current = await client.get("git/ref/heads/" + encodeURIComponent(config.expectedBranch));
     if (current.object?.sha !== producer.sha)

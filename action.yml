@@ -149,6 +149,7 @@ runs:
       shell: bash
       env:
         WORKER_MODE: ${{ inputs.mode }}
+        INCLUDE_SEARCH_INDEXES: ${{ inputs.include-search-indexes }}
         PRODUCER_WORKFLOW: ${{ inputs.producer-workflow }}
         PRODUCER_RUN_ID: ${{ inputs.producer-run-id }}
         STATIC_ARTIFACT_NAME: ${{ inputs.artifact-name }}
