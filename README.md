@@ -17,7 +17,7 @@ When upgrading a fork-enabled setup, delete the `pr-preview-worker.yml` workflow
 
 ## Requirements
 
-- Runner needs `bash`, `curl` and `python` available.
+- Runner needs `bash`, `curl`, `node` and `python` available.
 - Target repo must accept pushes to the configured branch.
 - For GitHub Pages, the target branch/folder must be configured accordingly.
 

@@ -33,6 +33,9 @@ jobs:
           npm run prettier:ci
           npm run lint:staged -- --version
 
+      - name: JavaScript unit tests
+        run: npm test
+
       - name: Setup Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:

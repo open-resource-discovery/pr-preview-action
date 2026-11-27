@@ -155,7 +155,7 @@ runs:
         cd "$GITHUB_WORKSPACE"
         folder="$(mktemp -d "$GITHUB_WORKSPACE/.pr-preview-static.XXXXXXXX")"
         echo "folder=${folder##*/}" >> "$GITHUB_OUTPUT"
-        python "$GITHUB_ACTION_PATH/.internal-tools/prepare_preview.py" \
+        node "$GITHUB_ACTION_PATH/.internal-tools/prepare-preview.mjs" \
           "$BUILD_DIR" "$folder" "$INCLUDE_SEARCH_INDEXES"
 
     - name: Generate QR code asset (deploy)
