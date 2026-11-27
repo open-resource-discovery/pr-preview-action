@@ -97,7 +97,8 @@ class TestActionContract(unittest.TestCase):
     def test_fork_input_cannot_enable_any_action_steps(self) -> None:
         self.assertIn("  fork:\n", self.text)
         self.assertNotIn("inputs.fork", self.text)
-        self.assertNotIn("steps.worker", self.text)
+        self.assertIn("if: inputs.mode == 'legacy'", self.text)
+        self.assertIn("if: inputs.mode == 'workflow-run' || inputs.mode == 'download-verified'", self.text)
         self.assertFalse((ROOT / "examples" / "pr-preview-worker.yml").exists())
 
 

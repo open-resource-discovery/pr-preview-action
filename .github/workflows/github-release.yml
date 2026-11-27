@@ -31,6 +31,9 @@ jobs:
           node-version: "26"
           package-manager-cache: false
 
+      - name: Install pinned npm for dependency policy
+        run: npm install --global --ignore-scripts npm@11.20.0 --registry=https://registry.npmjs.org/
+
       - name: Prepare automated changelog commits
         run: |
           npm ci --ignore-scripts

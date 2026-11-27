@@ -107,3 +107,30 @@ Follow the instructions in SECURITY.md.
 Copyright SAP SE or an SAP affiliated Company and Open Resource Discovery contributors.
 
 This project is licensed under [Apache-2.0](./LICENSE). Licensing metadata follows [REUSE](https://reuse.software/) and is recorded in [REUSE.toml](./REUSE.toml).
+
+## Trusted static worker
+
+Use mode: workflow-run from a publisher workflow defined on the protected default branch.
+The producer remains read-only and uploads a fixed-name static artifact.
+Set producer-workflow, producer-run-id (the triggering workflow_run ID), artifact-name, expected-base-branch, and the trusted publication target/URL.
+The worker verifies the run and unique current same-repository PR, validates the complete ZIP before reading file contents, and publishes through GitHub's signed commit API.
+It performs close cleanup without requiring a successful build or an artifact.
+Grant only actions: read, contents: write, and pull-requests: write to the publisher.
+Do not check out or execute PR code or restore producer caches in that job.
+The worker requires Node.js 20 or newer and a target branch that already exists.
+
+Use mode: download-verified in the publishing job of a scheduled/manual workflow.
+Set producer-run-id to the current run ID, the workflow filename, artifact name, and expected-artifact-files to a JSON array of exact JSON filenames.
+Only artifacts from that workflow's current default-branch revision are accepted.
+The artifact-directory output points to a fresh temporary directory; copy only the explicitly configured files into a trusted checkout.
+No install or build is needed to use either mode because the reviewed ZIP parser is bundled.
+
+The archive limits are 128 MiB compressed, 512 MiB total unpacked, 64 MiB per file, and 100,000 entries.
+Traversal, Git control paths, symlinks, special/executable files, duplicates and case conflicts, encryption, and unexpected data filenames are rejected.
+Storage redirects receive no GitHub authorization header.
+The default legacy mode preserves existing direct-deploy callers; paused previews should stay paused until their trusted publisher is reviewed and merged.
+
+For a scheduled/manual artifact containing a built site, use artifact-format: static and a trusted anchored expected-artifact-pattern.
+Use json-path-prefix (for example data/) to require JSON validation of report files while allowing site assets in a separate namespace.
+The filename pattern is trusted caller configuration and must never come from the artifact.
+For preview producers, mode: generate-qr reuses the existing QR generator without any publication or token inputs; pass the complete preview URL as pages-base-url and the static output as build-dir.
