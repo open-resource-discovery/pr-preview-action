@@ -37,7 +37,7 @@ function openZip(buffer) {
 }
 
 // Validate every central-directory entry before opening any entry data stream.
-function inspectEntries(zip, limits, allowedPaths) {
+function inspectEntries(zip, limits, allowedPaths, allowedPattern) {
   return new Promise((resolve, reject) => {
     const entries = [];
     const paths = new Map();
@@ -68,6 +68,7 @@ function inspectEntries(zip, limits, allowedPaths) {
         const key = name.toLowerCase();
         if (paths.has(key)) throw new Error("Duplicate or case-conflicting archive path");
         if (!directory && allowedPaths && !allowedPaths.has(name)) throw new Error("Unexpected archive file");
+        if (!directory && allowedPattern && !allowedPattern.test(name)) throw new Error("Unexpected archive file pattern");
         paths.set(key, { name, directory });
         entries.push({ entry, name, directory });
         zip.readEntry();
@@ -126,7 +127,7 @@ export async function readStaticArchive(buffer, options = {}) {
   if (allowedPaths) for (const name of allowedPaths) safeArchivePath(name);
   const zip = await openZip(buffer);
   try {
-    const entries = await inspectEntries(zip, limits, allowedPaths);
+    const entries = await inspectEntries(zip, limits, allowedPaths, options.allowedPattern);
     if (!entries.length) throw new Error("Archive contains no static files");
     const files = new Map();
     let actualBytes = 0;
@@ -134,7 +135,7 @@ export async function readStaticArchive(buffer, options = {}) {
       const content = await readEntry(zip, entry, limits.fileBytes);
       actualBytes += content.length;
       boundedSize(actualBytes, limits.unpackedBytes, "unpacked size");
-      if (options.jsonOnly) {
+      if (options.jsonOnly || (options.jsonPathPrefix && name.startsWith(options.jsonPathPrefix))) {
         try { JSON.parse(content.toString("utf8")); }
         catch { throw new Error("Artifact contains invalid JSON data"); }
       }

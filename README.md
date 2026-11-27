@@ -112,3 +112,8 @@ The archive limits are 128 MiB compressed, 512 MiB total unpacked, 64 MiB per fi
 Traversal, Git control paths, symlinks, special/executable files, duplicates and case conflicts, encryption, and unexpected data filenames are rejected.
 Storage redirects receive no GitHub authorization header.
 The default legacy mode preserves existing direct-deploy callers; paused previews should stay paused until their trusted publisher is reviewed and merged.
+
+For a scheduled/manual artifact containing a built site, use artifact-format: static and a trusted anchored expected-artifact-pattern.
+Use json-path-prefix (for example data/) to require JSON validation of report files while allowing site assets in a separate namespace.
+The filename pattern is trusted caller configuration and must never come from the artifact.
+For preview producers, mode: generate-qr reuses the existing QR generator without any publication or token inputs; pass the complete preview URL as pages-base-url and the static output as build-dir.

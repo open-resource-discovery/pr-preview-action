@@ -89,3 +89,11 @@ test("requires exactly the expected JSON files for data publication", async () =
 });
 
 export { makeZip };
+
+test("trusted namespace patterns admit site assets and validate JSON reports", async () => {
+  const options = { allowedPattern: /^(?:data[/](?:index[.]json|(?:canary|prod)[/]report-[0-9-]+[.]json)|site[/].+)$/, jsonPathPrefix: "data/" };
+  const files = await readStaticArchive(await makeZip([["data/index.json", "{}"], ["site/index.html", "<h1>Site</h1>"]]), options);
+  assert.equal(files.size, 2);
+  await assert.rejects(readStaticArchive(await makeZip([["scripts/run.mjs", "code"]]), options), /pattern/);
+  await assert.rejects(readStaticArchive(await makeZip([["data/index.json", "not JSON"]]), options), /invalid JSON/);
+});

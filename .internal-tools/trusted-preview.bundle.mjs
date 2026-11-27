@@ -1417,7 +1417,7 @@ function openZip(buffer) {
     strictFileNames: true
   }, (error, zip) => error ? reject(error) : resolve(zip)));
 }
-function inspectEntries(zip, limits, allowedPaths) {
+function inspectEntries(zip, limits, allowedPaths, allowedPattern) {
   return new Promise((resolve, reject) => {
     const entries = [];
     const paths = /* @__PURE__ */ new Map();
@@ -1448,6 +1448,7 @@ function inspectEntries(zip, limits, allowedPaths) {
         const key = name.toLowerCase();
         if (paths.has(key)) throw new Error("Duplicate or case-conflicting archive path");
         if (!directory && allowedPaths && !allowedPaths.has(name)) throw new Error("Unexpected archive file");
+        if (!directory && allowedPattern && !allowedPattern.test(name)) throw new Error("Unexpected archive file pattern");
         paths.set(key, { name, directory });
         entries.push({ entry, name, directory });
         zip.readEntry();
@@ -1504,7 +1505,7 @@ async function readStaticArchive(buffer, options2 = {}) {
   if (allowedPaths) for (const name of allowedPaths) safeArchivePath(name);
   const zip = await openZip(buffer);
   try {
-    const entries = await inspectEntries(zip, limits, allowedPaths);
+    const entries = await inspectEntries(zip, limits, allowedPaths, options2.allowedPattern);
     if (!entries.length) throw new Error("Archive contains no static files");
     const files = /* @__PURE__ */ new Map();
     let actualBytes = 0;
@@ -1512,7 +1513,7 @@ async function readStaticArchive(buffer, options2 = {}) {
       const content = await readEntry(zip, entry, limits.fileBytes);
       actualBytes += content.length;
       boundedSize(actualBytes, limits.unpackedBytes, "unpacked size");
-      if (options2.jsonOnly) {
+      if (options2.jsonOnly || options2.jsonPathPrefix && name.startsWith(options2.jsonPathPrefix)) {
         try {
           JSON.parse(content.toString("utf8"));
         } catch {
@@ -1778,7 +1779,9 @@ function loadWorkerConfig(env = process.env) {
     qr: env.QR_CODE !== "false",
     outputFile: env.GITHUB_OUTPUT,
     tempRoot: env.RUNNER_TEMP || os.tmpdir(),
-    jsonOnly: mode === "download-verified",
+    jsonOnly: mode === "download-verified" && env.ARTIFACT_FORMAT !== "static",
+    jsonPathPrefix: env.JSON_PATH_PREFIX || "",
+    allowedPattern: null,
     allowedPaths: env.EXPECTED_ARTIFACT_FILES ? JSON.parse(env.EXPECTED_ARTIFACT_FILES) : null,
     limits: { ...DEFAULT_LIMITS }
   };
@@ -1791,7 +1794,14 @@ function loadWorkerConfig(env = process.env) {
   if (config.allowedPaths !== null && (!Array.isArray(config.allowedPaths) || !config.allowedPaths.length || config.allowedPaths.some((p) => typeof p !== "string"))) {
     throw new Error("Expected artifact paths must be a nonempty array");
   }
-  if (config.mode === "download-verified" && !config.allowedPaths) throw new Error("Data downloads require an exact file allowlist");
+  if (env.ARTIFACT_FORMAT && !["json", "static"].includes(env.ARTIFACT_FORMAT)) throw new Error("Unsupported artifact format");
+  if (config.jsonPathPrefix) safeArchivePath(config.jsonPathPrefix, true);
+  if (env.EXPECTED_ARTIFACT_PATTERN) {
+    const pattern = env.EXPECTED_ARTIFACT_PATTERN;
+    if (pattern.length > 1024 || !pattern.startsWith("^") || !pattern.endsWith("$")) throw new Error("Artifact pattern must be a bounded anchored trusted expression");
+    config.allowedPattern = new RegExp(pattern);
+  }
+  if (config.mode === "download-verified" && !config.allowedPaths && !config.allowedPattern) throw new Error("Data downloads require an exact or pattern file allowlist");
   return config;
 }
 function createSourceClient(config, fetchImpl = globalThis.fetch) {
@@ -1901,7 +1911,7 @@ async function readArtifact(config, producer, client, fetchImpl) {
   const artifact = matching[0];
   if (artifact.workflow_run && (artifact.workflow_run.id !== producer.run.id || artifact.workflow_run.head_sha !== producer.run.head_sha)) throw new Error("Artifact is associated with another run or revision");
   const buffer = await downloadArchive(config, artifact, fetchImpl);
-  return readStaticArchive(buffer, { limits: config.limits, allowedPaths: config.allowedPaths, jsonOnly: config.jsonOnly });
+  return readStaticArchive(buffer, { limits: config.limits, allowedPaths: config.allowedPaths, allowedPattern: config.allowedPattern, jsonOnly: config.jsonOnly, jsonPathPrefix: config.jsonPathPrefix });
 }
 async function saveValidatedFiles(files, root) {
   const directory = await mkdtemp(path.join(root, "verified-static-artifact-"));
