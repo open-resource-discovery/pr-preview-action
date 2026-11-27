@@ -11,9 +11,10 @@
     "npm": ">=10.0.0"
   },
   "scripts": {
+    "test": "node --test tests/*.test.mjs",
     "lint:staged": "lint-staged",
-    "prettier": "prettier --write \"**/*.{json,yml,yaml,md}\"",
-    "prettier:ci": "prettier --check \"**/*.{json,yml,yaml,md}\"",
+    "prettier": "prettier --write \"**/*.{mjs,json,yml,yaml,md}\"",
+    "prettier:ci": "prettier --check \"**/*.{mjs,json,yml,yaml,md}\"",
     "prepare": "is-ci || husky",
     "setup:hooks": "is-ci || husky",
     "build:worker": "esbuild .internal-tools/trusted-preview.mjs --bundle --platform=node --format=esm --target=node20 --outfile=.internal-tools/trusted-preview.bundle.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
@@ -28,7 +29,7 @@
     "yazl": "3.3.1"
   },
   "lint-staged": {
-    "**/*.{json,yml,yaml,md}": [
+    "**/*.{mjs,json,yml,yaml,md}": [
       "prettier --write"
     ]
   },

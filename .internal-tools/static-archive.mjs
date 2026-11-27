@@ -15,8 +15,14 @@ export function safeArchivePath(value, directory = false) {
   const normalized = directory && value.endsWith("/") ? value.slice(0, -1) : value;
   if (!normalized || normalized !== normalized.normalize("NFC")) throw new Error("Archive path is not canonical");
   for (const part of normalized.split("/")) {
-    if (!part || part === "." || part === ".." || /^\.git/i.test(part) || /[. ]$/.test(part) ||
-        /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part)) {
+    if (
+      !part ||
+      part === "." ||
+      part === ".." ||
+      /^\.git/i.test(part) ||
+      /[. ]$/.test(part) ||
+      /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part)
+    ) {
       throw new Error("Archive contains a traversal, Git-control, or reserved path");
     }
   }
@@ -28,12 +34,18 @@ function boundedSize(value, limit, label) {
 }
 
 function openZip(buffer) {
-  return new Promise((resolve, reject) => yauzl.fromBuffer(buffer, {
-    lazyEntries: true,
-    autoClose: false,
-    validateEntrySizes: true,
-    strictFileNames: true,
-  }, (error, zip) => error ? reject(error) : resolve(zip)));
+  return new Promise((resolve, reject) =>
+    yauzl.fromBuffer(
+      buffer,
+      {
+        lazyEntries: true,
+        autoClose: false,
+        validateEntrySizes: true,
+        strictFileNames: true,
+      },
+      (error, zip) => (error ? reject(error) : resolve(zip)),
+    ),
+  );
 }
 
 // Validate every central-directory entry before opening any entry data stream.
@@ -59,8 +71,9 @@ function inspectEntries(zip, limits, allowedPaths, allowedPattern) {
         const name = safeArchivePath(entry.fileName, directory);
         const mode = entry.externalFileAttributes >>> 16;
         const kind = mode & 0o170000;
-        if (kind && kind !== (directory ? 0o040000 : 0o100000)) throw new Error("Archive symlinks and special files are forbidden");
-        if (!directory && (mode & 0o111)) throw new Error("Executable archive files are forbidden");
+        if (kind && kind !== (directory ? 0o040000 : 0o100000))
+          throw new Error("Archive symlinks and special files are forbidden");
+        if (!directory && mode & 0o111) throw new Error("Executable archive files are forbidden");
         boundedSize(entry.uncompressedSize, directory ? 0 : limits.fileBytes, "file size");
         boundedSize(entry.compressedSize, limits.compressedBytes, "compressed entry size");
         declaredBytes += entry.uncompressedSize;
@@ -68,7 +81,8 @@ function inspectEntries(zip, limits, allowedPaths, allowedPattern) {
         const key = name.toLowerCase();
         if (paths.has(key)) throw new Error("Duplicate or case-conflicting archive path");
         if (!directory && allowedPaths && !allowedPaths.has(name)) throw new Error("Unexpected archive file");
-        if (!directory && allowedPattern && !allowedPattern.test(name)) throw new Error("Unexpected archive file pattern");
+        if (!directory && allowedPattern && !allowedPattern.test(name))
+          throw new Error("Unexpected archive file pattern");
         paths.set(key, { name, directory });
         entries.push({ entry, name, directory });
         zip.readEntry();
@@ -97,24 +111,26 @@ function inspectEntries(zip, limits, allowedPaths, allowedPattern) {
 }
 
 function readEntry(zip, entry, limit) {
-  return new Promise((resolve, reject) => zip.openReadStream(entry, (error, stream) => {
-    if (error) return reject(error);
-    const chunks = [];
-    let bytes = 0;
-    stream.on("error", reject);
-    stream.on("data", (chunk) => {
-      bytes += chunk.length;
-      if (bytes > limit || bytes > entry.uncompressedSize) {
-        stream.destroy(new Error("Archive data exceeds declared size or file limit"));
-      } else {
-        chunks.push(chunk);
-      }
-    });
-    stream.on("end", () => {
-      if (bytes !== entry.uncompressedSize) return reject(new Error("Archive data size mismatch"));
-      resolve(Buffer.concat(chunks));
-    });
-  }));
+  return new Promise((resolve, reject) =>
+    zip.openReadStream(entry, (error, stream) => {
+      if (error) return reject(error);
+      const chunks = [];
+      let bytes = 0;
+      stream.on("error", reject);
+      stream.on("data", (chunk) => {
+        bytes += chunk.length;
+        if (bytes > limit || bytes > entry.uncompressedSize) {
+          stream.destroy(new Error("Archive data exceeds declared size or file limit"));
+        } else {
+          chunks.push(chunk);
+        }
+      });
+      stream.on("end", () => {
+        if (bytes !== entry.uncompressedSize) return reject(new Error("Archive data size mismatch"));
+        resolve(Buffer.concat(chunks));
+      });
+    }),
+  );
 }
 
 export async function readStaticArchive(buffer, options = {}) {
@@ -136,13 +152,20 @@ export async function readStaticArchive(buffer, options = {}) {
       actualBytes += content.length;
       boundedSize(actualBytes, limits.unpackedBytes, "unpacked size");
       if (options.jsonOnly || (options.jsonPathPrefix && name.startsWith(options.jsonPathPrefix))) {
-        try { JSON.parse(content.toString("utf8")); }
-        catch { throw new Error("Artifact contains invalid JSON data"); }
+        try {
+          JSON.parse(content.toString("utf8"));
+        } catch {
+          throw new Error("Artifact contains invalid JSON data");
+        }
       }
-      const oid = createHash("sha1").update("blob " + content.length + "\0").update(content).digest("hex");
+      const oid = createHash("sha1")
+        .update("blob " + content.length + "\0")
+        .update(content)
+        .digest("hex");
       files.set(name, { oid, contents: content.toString("base64") });
     }
-    if (allowedPaths && [...allowedPaths].some((name) => !files.has(name))) throw new Error("Archive is missing a required file");
+    if (allowedPaths && [...allowedPaths].some((name) => !files.has(name)))
+      throw new Error("Archive is missing a required file");
     return files;
   } finally {
     zip.close();

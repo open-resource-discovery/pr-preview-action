@@ -40,11 +40,11 @@ jobs:
           npm run prettier:ci
           npm run lint:staged -- --version
 
-      - name: Test trusted static worker
+      - name: JavaScript tests and bundle check
         run: |
           npm run build:worker
-          npm run test:worker
-          git diff --exit-code -- .internal-tools/trusted-preview.bundle.mjs
+          npm test
+          git diff --exit-code -- .internal-tools/trusted-preview.bundle.mjs .internal-tools/trusted-preview.bundle.mjs.LEGAL.txt
 
       - name: Setup Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7

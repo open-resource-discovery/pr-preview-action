@@ -1410,12 +1410,18 @@ function boundedSize(value, limit, label) {
   if (!Number.isSafeInteger(value) || value < 0 || value > limit) throw new Error("Archive exceeds " + label);
 }
 function openZip(buffer) {
-  return new Promise((resolve, reject) => import_yauzl.default.fromBuffer(buffer, {
-    lazyEntries: true,
-    autoClose: false,
-    validateEntrySizes: true,
-    strictFileNames: true
-  }, (error, zip) => error ? reject(error) : resolve(zip)));
+  return new Promise(
+    (resolve, reject) => import_yauzl.default.fromBuffer(
+      buffer,
+      {
+        lazyEntries: true,
+        autoClose: false,
+        validateEntrySizes: true,
+        strictFileNames: true
+      },
+      (error, zip) => error ? reject(error) : resolve(zip)
+    )
+  );
 }
 function inspectEntries(zip, limits, allowedPaths, allowedPattern) {
   return new Promise((resolve, reject) => {
@@ -1439,7 +1445,8 @@ function inspectEntries(zip, limits, allowedPaths, allowedPattern) {
         const name = safeArchivePath(entry.fileName, directory);
         const mode = entry.externalFileAttributes >>> 16;
         const kind = mode & 61440;
-        if (kind && kind !== (directory ? 16384 : 32768)) throw new Error("Archive symlinks and special files are forbidden");
+        if (kind && kind !== (directory ? 16384 : 32768))
+          throw new Error("Archive symlinks and special files are forbidden");
         if (!directory && mode & 73) throw new Error("Executable archive files are forbidden");
         boundedSize(entry.uncompressedSize, directory ? 0 : limits.fileBytes, "file size");
         boundedSize(entry.compressedSize, limits.compressedBytes, "compressed entry size");
@@ -1448,7 +1455,8 @@ function inspectEntries(zip, limits, allowedPaths, allowedPattern) {
         const key = name.toLowerCase();
         if (paths.has(key)) throw new Error("Duplicate or case-conflicting archive path");
         if (!directory && allowedPaths && !allowedPaths.has(name)) throw new Error("Unexpected archive file");
-        if (!directory && allowedPattern && !allowedPattern.test(name)) throw new Error("Unexpected archive file pattern");
+        if (!directory && allowedPattern && !allowedPattern.test(name))
+          throw new Error("Unexpected archive file pattern");
         paths.set(key, { name, directory });
         entries.push({ entry, name, directory });
         zip.readEntry();
@@ -1476,24 +1484,26 @@ function inspectEntries(zip, limits, allowedPaths, allowedPattern) {
   });
 }
 function readEntry(zip, entry, limit) {
-  return new Promise((resolve, reject) => zip.openReadStream(entry, (error, stream) => {
-    if (error) return reject(error);
-    const chunks = [];
-    let bytes = 0;
-    stream.on("error", reject);
-    stream.on("data", (chunk) => {
-      bytes += chunk.length;
-      if (bytes > limit || bytes > entry.uncompressedSize) {
-        stream.destroy(new Error("Archive data exceeds declared size or file limit"));
-      } else {
-        chunks.push(chunk);
-      }
-    });
-    stream.on("end", () => {
-      if (bytes !== entry.uncompressedSize) return reject(new Error("Archive data size mismatch"));
-      resolve(Buffer.concat(chunks));
-    });
-  }));
+  return new Promise(
+    (resolve, reject) => zip.openReadStream(entry, (error, stream) => {
+      if (error) return reject(error);
+      const chunks = [];
+      let bytes = 0;
+      stream.on("error", reject);
+      stream.on("data", (chunk) => {
+        bytes += chunk.length;
+        if (bytes > limit || bytes > entry.uncompressedSize) {
+          stream.destroy(new Error("Archive data exceeds declared size or file limit"));
+        } else {
+          chunks.push(chunk);
+        }
+      });
+      stream.on("end", () => {
+        if (bytes !== entry.uncompressedSize) return reject(new Error("Archive data size mismatch"));
+        resolve(Buffer.concat(chunks));
+      });
+    })
+  );
 }
 async function readStaticArchive(buffer, options2 = {}) {
   const limits = { ...DEFAULT_LIMITS, ...options2.limits };
@@ -1523,7 +1533,8 @@ async function readStaticArchive(buffer, options2 = {}) {
       const oid = createHash("sha1").update("blob " + content.length + "\0").update(content).digest("hex");
       files.set(name, { oid, contents: content.toString("base64") });
     }
-    if (allowedPaths && [...allowedPaths].some((name) => !files.has(name))) throw new Error("Archive is missing a required file");
+    if (allowedPaths && [...allowedPaths].some((name) => !files.has(name)))
+      throw new Error("Archive is missing a required file");
     return files;
   } finally {
     zip.close();
@@ -1640,7 +1651,10 @@ async function readPreviewState(client, config) {
         break;
       }
       if (entry.type !== "tree") throw new Error("Preview prefix is not a directory");
-      parent = requireTree(await client.get("git/trees/" + validateOid(entry.sha, "prefix tree OID")), "Preview prefix tree");
+      parent = requireTree(
+        await client.get("git/trees/" + validateOid(entry.sha, "prefix tree OID")),
+        "Preview prefix tree"
+      );
     }
   }
   const folder = parent.find((entry) => entry.path === "pr-" + config.pr);
@@ -1703,7 +1717,13 @@ async function publishFiles(config, files, {
     removed ||= config.action === "closed" && state.exists;
     if (config.action === "closed" && !state.exists) return { removed, changed: false, oid: state.head };
     if (!await beforeCommit()) return { skipped: true, removed: false, changed: false, oid: state.head };
-    const fileChanges = buildFileChanges({ pr: config.pr, action: config.action, files, state, pathPrefix: config.pathPrefix });
+    const fileChanges = buildFileChanges({
+      pr: config.pr,
+      action: config.action,
+      files,
+      state,
+      pathPrefix: config.pathPrefix
+    });
     if (fileChanges.additions.length === 0 && fileChanges.deletions.length === 0) {
       log("No changes to publish.");
       return { removed, changed: false, oid: state.head };
@@ -1743,7 +1763,8 @@ function positiveInteger(value, label) {
 }
 function httpsUrl(value, label) {
   const url = new URL(requireString(value, label));
-  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) throw new Error("Invalid " + label);
+  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash)
+    throw new Error("Invalid " + label);
   return url;
 }
 function loadWorkerConfig(env = process.env) {
@@ -1754,7 +1775,8 @@ function loadWorkerConfig(env = process.env) {
   if (!["workflow-run", "download-verified"].includes(mode)) throw new Error("Unsupported trusted worker mode");
   const repository = requireString(env.GITHUB_REPOSITORY, "source repository");
   const producer = requireString(env.PRODUCER_WORKFLOW, "producer workflow");
-  if (!REPOSITORY.test(repository) || !WORKFLOW.test(producer)) throw new Error("Invalid repository or producer workflow");
+  if (!REPOSITORY.test(repository) || !WORKFLOW.test(producer))
+    throw new Error("Invalid repository or producer workflow");
   const config = {
     mode,
     repository,
@@ -1794,14 +1816,17 @@ function loadWorkerConfig(env = process.env) {
   if (config.allowedPaths !== null && (!Array.isArray(config.allowedPaths) || !config.allowedPaths.length || config.allowedPaths.some((p) => typeof p !== "string"))) {
     throw new Error("Expected artifact paths must be a nonempty array");
   }
-  if (env.ARTIFACT_FORMAT && !["json", "static"].includes(env.ARTIFACT_FORMAT)) throw new Error("Unsupported artifact format");
+  if (env.ARTIFACT_FORMAT && !["json", "static"].includes(env.ARTIFACT_FORMAT))
+    throw new Error("Unsupported artifact format");
   if (config.jsonPathPrefix) safeArchivePath(config.jsonPathPrefix, true);
   if (env.EXPECTED_ARTIFACT_PATTERN) {
     const pattern = env.EXPECTED_ARTIFACT_PATTERN;
-    if (pattern.length > 1024 || !pattern.startsWith("^") || !pattern.endsWith("$")) throw new Error("Artifact pattern must be a bounded anchored trusted expression");
+    if (pattern.length > 1024 || !pattern.startsWith("^") || !pattern.endsWith("$"))
+      throw new Error("Artifact pattern must be a bounded anchored trusted expression");
     config.allowedPattern = new RegExp(pattern);
   }
-  if (config.mode === "download-verified" && !config.allowedPaths && !config.allowedPattern) throw new Error("Data downloads require an exact or pattern file allowlist");
+  if (config.mode === "download-verified" && !config.allowedPaths && !config.allowedPattern)
+    throw new Error("Data downloads require an exact or pattern file allowlist");
   return config;
 }
 function createSourceClient(config, fetchImpl = globalThis.fetch) {
@@ -1810,8 +1835,8 @@ function createSourceClient(config, fetchImpl = globalThis.fetch) {
       method,
       redirect: "manual",
       headers: {
-        authorization: "Bearer " + config.sourceToken,
-        accept: "application/vnd.github+json",
+        "authorization": "Bearer " + config.sourceToken,
+        "accept": "application/vnd.github+json",
         "content-type": "application/json"
       },
       signal: AbortSignal.timeout(6e4),
@@ -1835,7 +1860,8 @@ function createSourceClient(config, fetchImpl = globalThis.fetch) {
 }
 async function verifyProducer(config, event, client) {
   if (config.mode === "workflow-run") {
-    if (config.eventName !== "workflow_run" || event.workflow_run?.id !== config.runId) throw new Error("Worker is not associated with its workflow_run event");
+    if (config.eventName !== "workflow_run" || event.workflow_run?.id !== config.runId)
+      throw new Error("Worker is not associated with its workflow_run event");
   } else if (!["schedule", "workflow_dispatch"].includes(config.eventName) || config.currentRunId !== config.runId) {
     throw new Error("Data worker must consume its own trusted scheduled or manual run");
   }
@@ -1852,10 +1878,13 @@ async function verifyProducer(config, event, client) {
     }
     return { repo, run, sha: run.head_sha };
   }
-  if (run.event !== "pull_request" || run.status !== "completed") throw new Error("Unexpected preview producer event or status");
+  if (run.event !== "pull_request" || run.status !== "completed")
+    throw new Error("Unexpected preview producer event or status");
   let associations = run.pull_requests;
-  if (!Array.isArray(associations) || !associations.length) associations = await client.list("commits/" + run.head_sha + "/pulls");
-  if (associations.length !== 1 || !Number.isSafeInteger(associations[0].number) || associations[0].number <= 0) throw new Error("Ambiguous producer PR association");
+  if (!Array.isArray(associations) || !associations.length)
+    associations = await client.list("commits/" + run.head_sha + "/pulls");
+  if (associations.length !== 1 || !Number.isSafeInteger(associations[0].number) || associations[0].number <= 0)
+    throw new Error("Ambiguous producer PR association");
   const association = associations[0];
   const pr = await client.get("pulls/" + association.number);
   if (pr.number !== association.number || pr.base?.repo?.id !== repo.id || pr.base.ref !== config.expectedBranch || pr.head?.repo?.id !== repo.id) {
@@ -1875,7 +1904,8 @@ async function verifyProducer(config, event, client) {
   return { repo, run, pr, sha: expectedHead, action: "synchronize" };
 }
 async function downloadArchive(config, artifact, fetchImpl = globalThis.fetch) {
-  if (!Number.isSafeInteger(artifact.id) || artifact.id <= 0 || artifact.expired || !Number.isSafeInteger(artifact.size_in_bytes) || artifact.size_in_bytes < 0 || artifact.size_in_bytes > config.limits.compressedBytes) throw new Error("Invalid or oversized artifact metadata");
+  if (!Number.isSafeInteger(artifact.id) || artifact.id <= 0 || artifact.expired || !Number.isSafeInteger(artifact.size_in_bytes) || artifact.size_in_bytes < 0 || artifact.size_in_bytes > config.limits.compressedBytes)
+    throw new Error("Invalid or oversized artifact metadata");
   const endpoint = config.apiUrl + "/repos/" + config.repository + "/actions/artifacts/" + artifact.id + "/zip";
   let currentUrl = endpoint;
   let response = await fetchImpl(endpoint, {
@@ -1888,13 +1918,15 @@ async function downloadArchive(config, artifact, fetchImpl = globalThis.fetch) {
     const location = response.headers.get("location");
     if (!location) throw new Error("Artifact redirect is missing its destination");
     const redirect = new URL(location, currentUrl);
-    if (redirect.protocol !== "https:" || redirect.username || redirect.password) throw new Error("Unsafe artifact redirect");
+    if (redirect.protocol !== "https:" || redirect.username || redirect.password)
+      throw new Error("Unsafe artifact redirect");
     currentUrl = redirect.href;
     response = await fetchImpl(currentUrl, { redirect: "manual", signal: AbortSignal.timeout(6e4) });
   }
   if (!response.ok || !response.body) throw new Error("Artifact download failed");
   const declaredLength = response.headers.get("content-length");
-  if (declaredLength && Number(declaredLength) > config.limits.compressedBytes) throw new Error("Artifact download exceeds compressed limit");
+  if (declaredLength && Number(declaredLength) > config.limits.compressedBytes)
+    throw new Error("Artifact download exceeds compressed limit");
   const chunks = [];
   let bytes = 0;
   for await (const chunk of response.body) {
@@ -1909,9 +1941,16 @@ async function readArtifact(config, producer, client, fetchImpl) {
   const matching = artifacts.filter((artifact2) => artifact2.name === config.artifactName && !artifact2.expired);
   if (matching.length !== 1) throw new Error("Expected exactly one named artifact for the verified producer run");
   const artifact = matching[0];
-  if (artifact.workflow_run && (artifact.workflow_run.id !== producer.run.id || artifact.workflow_run.head_sha !== producer.run.head_sha)) throw new Error("Artifact is associated with another run or revision");
+  if (artifact.workflow_run && (artifact.workflow_run.id !== producer.run.id || artifact.workflow_run.head_sha !== producer.run.head_sha))
+    throw new Error("Artifact is associated with another run or revision");
   const buffer = await downloadArchive(config, artifact, fetchImpl);
-  return readStaticArchive(buffer, { limits: config.limits, allowedPaths: config.allowedPaths, allowedPattern: config.allowedPattern, jsonOnly: config.jsonOnly, jsonPathPrefix: config.jsonPathPrefix });
+  return readStaticArchive(buffer, {
+    limits: config.limits,
+    allowedPaths: config.allowedPaths,
+    allowedPattern: config.allowedPattern,
+    jsonOnly: config.jsonOnly,
+    jsonPathPrefix: config.jsonPathPrefix
+  });
 }
 async function saveValidatedFiles(files, root) {
   const directory = await mkdtemp(path.join(root, "verified-static-artifact-"));
@@ -1940,7 +1979,9 @@ async function upsertComment(config, producer, client, result, files) {
     if (config.commentFooter) body += "\n\n" + config.commentFooter;
   }
   const comments = await client.list("issues/" + producer.pr.number + "/comments");
-  const existing = comments.find((comment) => comment.user?.type === "Bot" && comment.user.login === "github-actions[bot]" && typeof comment.body === "string" && comment.body.includes(marker));
+  const existing = comments.find(
+    (comment) => comment.user?.type === "Bot" && comment.user.login === "github-actions[bot]" && typeof comment.body === "string" && comment.body.includes(marker)
+  );
   if (existing) await client.request("issues/comments/" + existing.id, "PATCH", { body });
   else await client.request("issues/" + producer.pr.number + "/comments", "POST", { body });
   return previewUrl;
@@ -1953,20 +1994,29 @@ async function runTrustedWorker(config, { fetchImpl = globalThis.fetch, event, l
   const files = producer.action === "closed" ? /* @__PURE__ */ new Map() : await readArtifact(config, producer, client, fetchImpl);
   if (config.mode === "download-verified") {
     const current = await client.get("git/ref/heads/" + encodeURIComponent(config.expectedBranch));
-    if (current.object?.sha !== producer.sha) throw new Error("Default branch changed while downloading the data artifact");
+    if (current.object?.sha !== producer.sha)
+      throw new Error("Default branch changed while downloading the data artifact");
     const directory = await saveValidatedFiles(files, config.tempRoot);
-    if (config.outputFile) await appendFile(config.outputFile, "artifact-directory=" + directory + "\nsource-sha=" + producer.sha + "\n");
+    if (config.outputFile)
+      await appendFile(config.outputFile, "artifact-directory=" + directory + "\nsource-sha=" + producer.sha + "\n");
     return { directory, files };
   }
   const stillCurrent = async () => {
     const latest = await client.get("pulls/" + producer.pr.number);
     return latest.base?.repo?.id === producer.repo.id && latest.head?.repo?.id === producer.repo.id && latest.base.ref === config.expectedBranch && (producer.action === "closed" ? latest.state === "closed" : latest.state === "open" && !latest.draft && latest.head.sha === producer.sha);
   };
-  const publication = { ...config, repository: config.targetRepository, pr: String(producer.pr.number), sha: producer.sha, action: producer.action };
+  const publication = {
+    ...config,
+    repository: config.targetRepository,
+    pr: String(producer.pr.number),
+    sha: producer.sha,
+    action: producer.action
+  };
   const result = await publishFiles(publication, files, { fetchImpl, log, beforeCommit: stillCurrent });
   if (result.skipped || !await stillCurrent()) return { skipped: true };
   const previewUrl = await upsertComment(config, producer, client, result, files);
-  if (config.outputFile) await appendFile(config.outputFile, "removed=" + result.removed + "\npreview-url=" + (previewUrl || "") + "\n");
+  if (config.outputFile)
+    await appendFile(config.outputFile, "removed=" + result.removed + "\npreview-url=" + (previewUrl || "") + "\n");
   return { ...result, previewUrl };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

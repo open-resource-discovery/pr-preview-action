@@ -1,4 +1,3 @@
-
 const COMMIT_MUTATION = `
   mutation PublishPreview($input: CreateCommitOnBranchInput!) {
     createCommitOnBranch(input: $input) {
@@ -80,7 +79,7 @@ export function createApiClient(config, fetchImpl = globalThis.fetch) {
       if (result.errors?.length) {
         throw new GitHubApiError(
           `GitHub commit mutation failed: ${result.errors.map((error) => error.message).join("; ")}`,
-          { errors: result.errors }
+          { errors: result.errors },
         );
       }
       const commit = result.data?.createCommitOnBranch?.commit;
@@ -92,7 +91,7 @@ export function createApiClient(config, fetchImpl = globalThis.fetch) {
         commit.signature?.state !== "VALID"
       ) {
         throw new GitHubApiError(
-          `Preview commit ${commit.oid} did not receive a verified GitHub signature; check Enterprise web commit signing.`
+          `Preview commit ${commit.oid} did not receive a verified GitHub signature; check Enterprise web commit signing.`,
         );
       }
       return commit;
@@ -119,9 +118,15 @@ export async function readPreviewState(client, config) {
     validatePath(config.pathPrefix);
     for (const component of config.pathPrefix.split("/")) {
       const entry = parent.find((item) => item.path === component);
-      if (!entry) { parent = []; break; }
+      if (!entry) {
+        parent = [];
+        break;
+      }
       if (entry.type !== "tree") throw new Error("Preview prefix is not a directory");
-      parent = requireTree(await client.get("git/trees/" + validateOid(entry.sha, "prefix tree OID")), "Preview prefix tree");
+      parent = requireTree(
+        await client.get("git/trees/" + validateOid(entry.sha, "prefix tree OID")),
+        "Preview prefix tree",
+      );
     }
   }
   const folder = parent.find((entry) => entry.path === "pr-" + config.pr);
@@ -134,7 +139,7 @@ export async function readPreviewState(client, config) {
     if (folder.type !== "tree") throw new Error(`pr-${config.pr} is not a preview directory.`);
     const entries = requireTree(
       await client.get(`git/trees/${validateOid(folder.sha, "preview tree OID")}?recursive=1`),
-      "Existing preview tree"
+      "Existing preview tree",
     );
     for (const entry of entries) {
       if (entry.type === "tree") continue;
@@ -173,7 +178,7 @@ function isStaleHead(error) {
     error instanceof GitHubApiError &&
     error.errors?.length > 0 &&
     error.errors.every((entry) =>
-      [entry.type, entry.extensions?.code, entry.extensions?.type].some((value) => value === "STALE_DATA")
+      [entry.type, entry.extensions?.code, entry.extensions?.type].some((value) => value === "STALE_DATA"),
     )
   );
 }
@@ -186,7 +191,7 @@ export async function publishFiles(
     sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     log = console.log,
     beforeCommit = async () => true,
-  } = {}
+  } = {},
 ) {
   const client = createApiClient(config, fetchImpl);
   let removed = false;
@@ -195,7 +200,13 @@ export async function publishFiles(
     removed ||= config.action === "closed" && state.exists;
     if (config.action === "closed" && !state.exists) return { removed, changed: false, oid: state.head };
     if (!(await beforeCommit())) return { skipped: true, removed: false, changed: false, oid: state.head };
-    const fileChanges = buildFileChanges({ pr: config.pr, action: config.action, files, state, pathPrefix: config.pathPrefix });
+    const fileChanges = buildFileChanges({
+      pr: config.pr,
+      action: config.action,
+      files,
+      state,
+      pathPrefix: config.pathPrefix,
+    });
     if (fileChanges.additions.length === 0 && fileChanges.deletions.length === 0) {
       log("No changes to publish.");
 

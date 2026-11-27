@@ -24,15 +24,51 @@ test("stages only verified JSON from the current scheduled run in a fresh direct
     const records = {
       "": repo,
       "actions/workflows/data.yml": { id: 9, path: ".github/workflows/data.yml" },
-      "actions/runs/7": { id: 7, workflow_id: 9, repository: repo, head_repository: repo, head_branch: "main", head_sha: SHA, event: "schedule" },
+      "actions/runs/7": {
+        id: 7,
+        workflow_id: 9,
+        repository: repo,
+        head_repository: repo,
+        head_branch: "main",
+        head_sha: SHA,
+        event: "schedule",
+      },
       "git/ref/heads/main": { object: { sha: SHA } },
-      "actions/runs/7/artifacts": { artifacts: [{ id: 4, name: "data", size_in_bytes: archive.length, expired: false, workflow_run: { id: 7, head_sha: SHA } }] },
+      "actions/runs/7/artifacts": {
+        artifacts: [
+          {
+            id: 4,
+            name: "data",
+            size_in_bytes: archive.length,
+            expired: false,
+            workflow_run: { id: 7, head_sha: SHA },
+          },
+        ],
+      },
     };
     let writes = 0;
-    const config = { apiUrl: "https://api.example.test", mode: "download-verified", sourceToken: "fixture", repository: "ORD/repo", producer: "data.yml", eventName: "schedule", currentRunId: 7, runId: 7, expectedBranch: "main", artifactName: "data", tempRoot, jsonOnly: true, allowedPaths: ["data.json"], limits: DEFAULT_LIMITS };
+    const config = {
+      apiUrl: "https://api.example.test",
+      mode: "download-verified",
+      sourceToken: "fixture",
+      repository: "ORD/repo",
+      producer: "data.yml",
+      eventName: "schedule",
+      currentRunId: 7,
+      runId: 7,
+      expectedBranch: "main",
+      artifactName: "data",
+      tempRoot,
+      jsonOnly: true,
+      allowedPaths: ["data.json"],
+      limits: DEFAULT_LIMITS,
+    };
     const fetchImpl = async (url, options) => {
       if (options.method && options.method !== "GET") writes++;
-      const key = url.replace(config.apiUrl + "/repos/ORD/repo", "").replace(/^[/]/, "").split("?")[0];
+      const key = url
+        .replace(config.apiUrl + "/repos/ORD/repo", "")
+        .replace(/^[/]/, "")
+        .split("?")[0];
       if (key === "actions/artifacts/4/zip") return new Response(archive);
       assert.ok(key in records, key);
       return new Response(JSON.stringify(records[key]));
