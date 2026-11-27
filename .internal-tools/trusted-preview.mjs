@@ -136,8 +136,11 @@ export async function verifyProducer(config, event, client) {
   if (config.mode === "workflow-run") {
     if (config.eventName !== "workflow_run" || event.workflow_run?.id !== config.runId)
       throw new Error("Worker is not associated with its workflow_run event");
-  } else if (!["schedule", "workflow_dispatch"].includes(config.eventName) || config.currentRunId !== config.runId) {
-    throw new Error("Data worker must consume its own trusted scheduled or manual run");
+  } else if (
+    !["schedule", "workflow_dispatch", "push"].includes(config.eventName) ||
+    config.currentRunId !== config.runId
+  ) {
+    throw new Error("Data worker must consume its own trusted scheduled, manual or push run");
   }
   const repo = await client.get("");
   const workflow = await client.get("actions/workflows/" + encodeURIComponent(config.producer));
@@ -158,7 +161,8 @@ export async function verifyProducer(config, event, client) {
     if (
       repo.default_branch !== config.expectedBranch ||
       run.head_branch !== config.expectedBranch ||
-      !["schedule", "workflow_dispatch"].includes(run.event) ||
+      run.event !== config.eventName ||
+      !["schedule", "workflow_dispatch", "push"].includes(run.event) ||
       ref.object?.sha !== run.head_sha
     ) {
       throw new Error("Data producer is not the current protected default-branch revision");

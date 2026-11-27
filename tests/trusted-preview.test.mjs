@@ -131,6 +131,26 @@ test("data downloads are restricted to their own current default-branch run", as
     /current protected/,
   );
 });
+test("push downloads accept only the same current default-branch workflow run", async () => {
+  const pushConfig = { ...config, mode: "download-verified", eventName: "push", currentRunId: 7 };
+  const run = { event: "push", head_branch: "main", status: "in_progress", conclusion: null };
+  assert.equal((await verifyProducer(pushConfig, {}, fixture({ run }))).sha, SHA);
+  await assert.rejects(verifyProducer({ ...pushConfig, currentRunId: 8 }, {}, fixture({ run })), /own trusted/);
+  for (const invalid of [
+    { event: "pull_request" },
+    { event: "schedule" },
+    { head_branch: "feature" },
+    { head_sha: "b".repeat(40) },
+    { head_repository: { id: 456 } },
+    { workflow_id: 99 },
+  ]) {
+    await assert.rejects(
+      verifyProducer(pushConfig, {}, fixture({ run: { ...run, ...invalid } })),
+      /current protected|association/,
+    );
+  }
+});
+
 test("artifact redirects never receive the GitHub token", async () => {
   const downloadConfig = {
     apiUrl: "https://api.example.test",

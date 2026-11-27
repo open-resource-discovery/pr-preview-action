@@ -119,7 +119,7 @@ Grant only actions: read, contents: write, and pull-requests: write to the publi
 Do not check out or execute PR code or restore producer caches in that job.
 The worker requires Node.js 20 or newer and a target branch that already exists.
 
-Use mode: download-verified in the publishing job of a scheduled/manual workflow.
+Use mode: download-verified in the publishing job of a scheduled, manually dispatched, or default-branch push workflow.
 Set producer-run-id to the current run ID, the workflow filename, artifact name, and expected-artifact-files to a JSON array of exact JSON filenames.
 Only artifacts from that workflow's current default-branch revision are accepted.
 The artifact-directory output points to a fresh temporary directory; copy only the explicitly configured files into a trusted checkout.
@@ -130,7 +130,7 @@ Traversal, Git control paths, symlinks, special/executable files, duplicates and
 Storage redirects receive no GitHub authorization header.
 The default legacy mode preserves existing direct-deploy callers; paused previews should stay paused until their trusted publisher is reviewed and merged.
 
-For a scheduled/manual artifact containing a built site, use artifact-format: static and a trusted anchored expected-artifact-pattern.
+For a scheduled/manual/push artifact containing a built site, use artifact-format: static and a trusted anchored expected-artifact-pattern.
 Use json-path-prefix (for example data/) to require JSON validation of report files while allowing site assets in a separate namespace.
 The filename pattern is trusted caller configuration and must never come from the artifact.
 For preview producers, mode: generate-qr reuses the existing QR generator without any publication or token inputs; pass the complete preview URL as pages-base-url and the static output as build-dir.
