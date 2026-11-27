@@ -168,7 +168,7 @@ export function buildFileChanges({ pr, action, files, state, pathPrefix = "" }) 
     const nestedPreview = file
       .split("/")
       .slice(0, -1)
-      .some((part) => part.startsWith("pr-"));
+      .some((part) => /^pr-[1-9]\d*$/.test(part));
     if (!desired.has(file) && (action === "closed" || !nestedPreview)) deletions.push({ path: prefix + file });
   }
   if (!state.hasNojekyll) additions.push({ path: ".nojekyll", contents: "" });

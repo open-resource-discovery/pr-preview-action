@@ -91,11 +91,16 @@ test("updates preserve existing nested previews while close cleanup removes the 
     hasNojekyll: true,
     files: new Map([
       ["search-index.json", { oid: SHA }],
+      ["guides/pr-guide/old.html", { oid: SHA }],
       ["guides/pr-2345/index.html", { oid: SHA }],
     ]),
   };
   const update = buildFileChanges({ pr: "2", action: "synchronize", files: new Map(), state });
-  assert.deepEqual(update.deletions, [{ path: "pr-2/search-index.json" }]);
+  assert.deepEqual(update.deletions, [{ path: "pr-2/guides/pr-guide/old.html" }, { path: "pr-2/search-index.json" }]);
   const cleanup = buildFileChanges({ pr: "2", action: "closed", files: new Map(), state });
-  assert.equal(cleanup.deletions.length, 2);
+  assert.deepEqual(cleanup.deletions, [
+    { path: "pr-2/guides/pr-2345/index.html" },
+    { path: "pr-2/guides/pr-guide/old.html" },
+    { path: "pr-2/search-index.json" },
+  ]);
 });

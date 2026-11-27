@@ -1760,7 +1760,7 @@ function buildFileChanges({ pr, action, files, state, pathPrefix = "" }) {
   }
   for (const file of state.files.keys()) {
     validatePath(file);
-    const nestedPreview = file.split("/").slice(0, -1).some((part) => part.startsWith("pr-"));
+    const nestedPreview = file.split("/").slice(0, -1).some((part) => /^pr-[1-9]\d*$/.test(part));
     if (!desired.has(file) && (action === "closed" || !nestedPreview)) deletions.push({ path: prefix + file });
   }
   if (!state.hasNojekyll) additions.push({ path: ".nojekyll", contents: "" });
@@ -1868,7 +1868,7 @@ function loadWorkerConfig(env = process.env) {
     commentTitle: env.COMMENT_TITLE || "PR Preview",
     commentFooter: env.COMMENT_FOOTER || "",
     qr: env.QR_CODE !== "false",
-    includeSearchIndexes: env.INCLUDE_SEARCH_INDEXES === "true",
+    includeSearchIndexes: (env.INCLUDE_SEARCH_INDEXES ?? "").toLowerCase() === "true",
     outputFile: env.GITHUB_OUTPUT,
     tempRoot: env.RUNNER_TEMP || os.tmpdir(),
     jsonOnly: mode === "download-verified" && env.ARTIFACT_FORMAT !== "static",

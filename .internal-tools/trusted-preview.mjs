@@ -60,7 +60,7 @@ export function loadWorkerConfig(env = process.env) {
     commentTitle: env.COMMENT_TITLE || "PR Preview",
     commentFooter: env.COMMENT_FOOTER || "",
     qr: env.QR_CODE !== "false",
-    includeSearchIndexes: env.INCLUDE_SEARCH_INDEXES === "true",
+    includeSearchIndexes: (env.INCLUDE_SEARCH_INDEXES ?? "").toLowerCase() === "true",
     outputFile: env.GITHUB_OUTPUT,
     tempRoot: env.RUNNER_TEMP || os.tmpdir(),
     jsonOnly: mode === "download-verified" && env.ARTIFACT_FORMAT !== "static",
