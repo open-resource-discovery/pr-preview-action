@@ -4,8 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import yazl from "yazl";
-import { runTrustedWorker } from "../.internal-tools/trusted-preview.mjs";
-import { DEFAULT_LIMITS } from "../.internal-tools/static-archive.mjs";
+const { loadWorkerConfig, runTrustedWorker } = await import(
+  process.env.TEST_WORKER_BUNDLE === "1"
+    ? "../.internal-tools/trusted-preview.bundle.mjs"
+    : "../.internal-tools/trusted-preview.mjs"
+);
 
 const SHA = "a".repeat(40);
 async function zip() {
@@ -47,22 +50,22 @@ test("stages only verified JSON from the current scheduled run in a fresh direct
       },
     };
     let writes = 0;
-    const config = {
-      apiUrl: "https://api.example.test",
-      mode: "download-verified",
-      sourceToken: "fixture",
-      repository: "ORD/repo",
-      producer: "data.yml",
-      eventName: "schedule",
-      currentRunId: 7,
-      runId: 7,
-      expectedBranch: "main",
-      artifactName: "data",
-      tempRoot,
-      jsonOnly: true,
-      allowedPaths: ["data.json"],
-      limits: DEFAULT_LIMITS,
-    };
+    const config = loadWorkerConfig({
+      GITHUB_API_URL: "https://api.example.test",
+      GITHUB_GRAPHQL_URL: "https://api.example.test/graphql",
+      WORKER_MODE: "download-verified",
+      GITHUB_REPOSITORY: "ORD/repo",
+      GITHUB_EVENT_NAME: "schedule",
+      GITHUB_EVENT_PATH: "/unused-fixture-event.json",
+      GITHUB_RUN_ID: "7",
+      SOURCE_TOKEN: "fixture",
+      PRODUCER_WORKFLOW: "data.yml",
+      PRODUCER_RUN_ID: "7",
+      STATIC_ARTIFACT_NAME: "data",
+      EXPECTED_BASE_BRANCH: "main",
+      EXPECTED_ARTIFACT_FILES: '["data.json"]',
+      RUNNER_TEMP: tempRoot,
+    });
     const fetchImpl = async (url, options) => {
       if (options.method && options.method !== "GET") writes++;
       const key = url

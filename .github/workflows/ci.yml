@@ -30,7 +30,7 @@ jobs:
           cache: npm
 
       - name: Install pinned npm for dependency policy
-        run: npm install --global --ignore-scripts npm@11.20.0 --registry=https://registry.npmjs.org/
+        run: npm install --global --ignore-scripts npm@11.21.3 --registry=https://registry.npmjs.org/
 
       - name: Install Node dependencies
         run: npm ci --ignore-scripts --engine-strict
@@ -64,3 +64,14 @@ jobs:
         uses: fsfe/reuse-action@676e2d560c9a403aa252096d99fcab3e1132b0f5 # v6
       - name: Python unit tests
         run: python -m unittest discover -s tests -v
+
+      - name: Set up minimum Node.js runtime
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "20"
+          package-manager-cache: false
+
+      - name: Test published preview bundle on Node.js 20
+        env:
+          TEST_WORKER_BUNDLE: "1"
+        run: node --test tests/worker.test.mjs
