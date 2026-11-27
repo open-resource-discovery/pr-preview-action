@@ -13,6 +13,11 @@ inputs:
     required: false
     default: "build"
 
+  include-search-indexes:
+    description: "Publish generated search indexes and keep documentation search controls. Enable when previewing search changes."
+    required: false
+    default: "false"
+
   token:
     description: "Token used for API + deploy/cleanup (PAT recommended - falls back to GITHUB_TOKEN when not available)."
     required: false
@@ -138,12 +143,27 @@ runs:
             --preview-target-folder "$folder" --preview-url "$url" --qr-enabled "$QR_ENABLED"
         } >> "$GITHUB_OUTPUT"
 
+    - name: Prepare preview files
+      id: prepare
+      if: steps.setup.outputs.deployment_action == 'deploy'
+      shell: bash
+      env:
+        BUILD_DIR: ${{ inputs.build-dir }}
+        INCLUDE_SEARCH_INDEXES: ${{ inputs.include-search-indexes }}
+      run: |
+        set -euo pipefail
+        cd "$GITHUB_WORKSPACE"
+        folder="$(mktemp -d "$GITHUB_WORKSPACE/.pr-preview-static.XXXXXXXX")"
+        echo "folder=${folder##*/}" >> "$GITHUB_OUTPUT"
+        node "$GITHUB_ACTION_PATH/.internal-tools/prepare-preview.mjs" \
+          "$BUILD_DIR" "$folder" "$INCLUDE_SEARCH_INDEXES"
+
     - name: Generate QR code asset (deploy)
       if: steps.setup.outputs.deployment_action == 'deploy' && inputs.qr-code != 'false' && startsWith(steps.setup.outputs.preview_url, 'http')
       shell: bash
       env:
         PREVIEW_URL: ${{ steps.setup.outputs.preview_url }}
-        BUILD_DIR: ${{ inputs.build-dir }}
+        BUILD_DIR: ${{ github.workspace }}/${{ steps.prepare.outputs.folder }}
       run: python "$GITHUB_ACTION_PATH/.internal-tools/generate_qr_svg.py" "$PREVIEW_URL" "$BUILD_DIR/pr-preview-qr.png"
 
     - name: Deploy preview
@@ -153,9 +173,11 @@ runs:
         token: ${{ inputs.token || github.token }}
         repository-name: ${{ steps.setup.outputs.target_repo }}
         branch: ${{ inputs.target-branch }}
-        folder: ${{ inputs.build-dir }}
+        folder: ${{ steps.prepare.outputs.folder }}
         target-folder: ${{ steps.setup.outputs.preview_target_folder }}
-        clean: false
+        # Remove stale files only inside this pull request's target folder.
+        clean: true
+        clean-exclude: "**/pr-[0-9]*/***"
         # Preserve previews published concurrently by other repositories.
         force: false
         attempt-limit: 10
@@ -245,6 +267,15 @@ runs:
           | Built to branch [`${{ inputs.target-branch }}`](${{ github.server_url }}/${{ steps.setup.outputs.target_repo }}/tree/${{ inputs.target-branch }}) at ${{ steps.comment_time.outputs.utc }}. |
           | ${{ inputs.comment-footer }} |
         GITHUB_TOKEN: ${{ inputs.token || github.token }}
+
+    - name: Remove prepared preview files
+      if: always() && steps.prepare.outputs.folder != ''
+      shell: bash
+      env:
+        PREVIEW_DIR: ${{ steps.prepare.outputs.folder }}
+      run: |
+        cd "$GITHUB_WORKSPACE"
+        rm -rf -- "$PREVIEW_DIR"
 
     - name: Checkout target repo (remove)
       if: steps.setup.outputs.deployment_action == 'remove'
