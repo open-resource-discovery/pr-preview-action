@@ -23,18 +23,35 @@ When upgrading a fork-enabled setup, delete the `pr-preview-worker.yml` workflow
 
 ## Inputs
 
-| Input          | Required | Default      | Description                                                                                                      |
-| -------------- | -------- | ------------ | ---------------------------------------------------------------------------------------------------------------- |
-| build-dir      | no       | build        | Directory containing built output.                                                                               |
-| token          | no       | GITHUB_TOKEN | Token used for API + deploy/remove (PAT recommended for cross-repo).                                             |
-| target-repo    | no       |              | Repo hosting previews. If empty, deploys to the current repository.                                              |
-| target-branch  | no       | main         | Branch to deploy to.                                                                                             |
-| pages-base-url | no       | ""           | Base URL used in the PR comment link.                                                                            |
-| qr-code        | no       | true         | Adds an internally generated QR code to the PR comment. Set to `false` to disable.                               |
-| umbrella-dir   | no       | ""           | Top-level directory inside the target repo. If not set, a smart default is chosen (see "Preview folder layout"). |
-| comment-\*     | no       | ...          | Sticky PR comment configuration.                                                                                 |
+| Input                  | Required | Default      | Description                                                                                                      |
+| ---------------------- | -------- | ------------ | ---------------------------------------------------------------------------------------------------------------- |
+| build-dir              | no       | build        | Directory containing built output.                                                                               |
+| include-search-indexes | no       | false        | Publish generated search indexes and keep documentation search controls. Enable when testing search changes.     |
+| token                  | no       | GITHUB_TOKEN | Token used for API + deploy/remove (PAT recommended for cross-repo).                                             |
+| target-repo            | no       |              | Repo hosting previews. If empty, deploys to the current repository.                                              |
+| target-branch          | no       | main         | Branch to deploy to.                                                                                             |
+| pages-base-url         | no       | ""           | Base URL used in the PR comment link.                                                                            |
+| qr-code                | no       | true         | Adds an internally generated QR code to the PR comment. Set to `false` to disable.                               |
+| umbrella-dir           | no       | ""           | Top-level directory inside the target repo. If not set, a smart default is chosen (see "Preview folder layout"). |
+| comment-\*             | no       | ...          | Sticky PR comment configuration.                                                                                 |
 
 GitHub Pages can take up to 10 minutes to publish a change. By default, the action checks the preview URL up to 180 times (`wait-poll-attempts`) with a five-second pause between attempts (`wait-poll-interval-seconds`). This allows about 15 minutes of pauses for delayed publication. HTTP requests add to the elapsed time. The check ends as soon as the preview responds successfully. [GitHub Pages publishing times](https://docs.github.com/en/pages/getting-started-with-github-pages/creating-a-github-pages-site#viewing-your-published-site).
+
+## Search indexes
+
+Previews exclude `search-index*.json` files at every directory level, including their `.gz` and `.br` variants.
+These generated files duplicate source content in a dense format that makes secret-scanning findings difficult to trace.
+The action prepares a temporary deployment copy, so the original build output remains available for other workflow steps.
+When indexes are excluded, Docusaurus pages hide the desktop and mobile documentation search controls.
+Other HTML pages and application filters are unchanged.
+
+Set `include-search-indexes: true` when a pull request needs to test documentation search.
+
+Each deployment removes obsolete files within its own PR preview directory, including indexes left by earlier deployments.
+Other preview directories are preserved.
+Existing previews receive this cleanup when redeployed or removed on PR closure.
+This does not remove files from Git history or resolve historical secret-scanning alerts.
+Source files and rendered pages still require review if a finding represents an actual secret.
 
 ## Preview folder layout (umbrella-dir behavior)
 
