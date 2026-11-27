@@ -32,7 +32,9 @@ jobs:
           package-manager-cache: false
 
       - name: Install pinned npm for dependency policy
-        run: npm install --global --ignore-scripts npm@11.21.3 --registry=https://registry.npmjs.org/
+        run: |
+          npm install --global --ignore-scripts npm@12.2.3 --registry=https://registry.npmjs.org/
+          npm --version
 
       - name: Prepare automated changelog commits
         run: |
