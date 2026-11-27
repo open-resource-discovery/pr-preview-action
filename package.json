@@ -33,7 +33,7 @@
       "prettier --write"
     ]
   },
-  "packageManager": "npm@11.20.0",
+  "packageManager": "npm@11.21.3",
   "devEngines": {
     "packageManager": {
       "name": "npm",
